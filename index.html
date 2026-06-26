@@ -4,8 +4,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JudyBid™ — Single-File Prototype</title>
-  <meta name="description" content="JudyBid™ helps small businesses review, match, and understand government bid opportunities using a lightweight client-side prototype with optional backend/LLM hooks." />
+  <title>JudyBid Analyze™ — Government Bid Review Assistant</title>
+  <meta name="description" content="JudyBid Analyze™ helps small businesses review, match, and understand government bid opportunities using intelligent scoring signals and fit analysis." />
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     // Tailwind config: enable dark mode via class
@@ -23,11 +23,10 @@
     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
       <div class="flex items-center gap-3">
         <svg width="28" height="28" viewBox="0 0 24 24" class="text-indigo-600 dark:text-indigo-400" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 14.59L8.41 12 10 10.41l3 3 5-5L19.59 10Z"/></svg>
-        <h1 class="text-xl sm:text-2xl font-semibold tracking-tight">JudyBid™</h1>
-        <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-600/10 text-indigo-700 dark:text-indigo-300">prototype</span>
+        <h1 class="text-xl sm:text-2xl font-semibold tracking-tight">JudyBid Analyze™</h1>
       </div>
       <div class="flex items-center gap-2">
-        <button id="mockToggle" class="px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 text-sm" aria-pressed="true" title="Toggle Mock Data Mode (no backend required)">Mock Data: On</button>
+        <button id="exampleToggle" class="px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 text-sm" aria-pressed="true" title="Toggle example opportunities">Example Opportunities: On</button>
         <button id="exportBtn" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-sm">Export</button>
         <button id="clearBtn" class="px-3 py-1.5 rounded-lg border border-slate-300/60 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 text-sm">Clear</button>
         <button id="themeBtn" class="p-2 rounded-lg border border-slate-300/60 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800" title="Toggle dark mode" aria-label="Toggle theme">
@@ -46,30 +45,26 @@
         <span class="font-medium">How it works</span>
       </summary>
       <div class="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
-        <p class="mb-2">This single-file JudyBid™ prototype lets you define a <strong>Business Profile</strong>, choose government <strong>Opportunity Sources</strong>, pull mock opportunities, and compute a <strong>JudyBid match score</strong> using a transparent heuristic. You can wire in a backend or LLM later via the <code>LLM.match()</code> stub.</p>
-        <ul class="list-disc pl-5 space-y-1">
-          <li><b>Mock mode On</b> (default): uses bundled sample government opportunities.</li>
-          <li><b>Mock mode Off</b>: attempts to fetch from your custom endpoints (requires CORS‑enabled backend).</li>
-          <li><b>Export</b>: download JSON/CSV of the ranked JudyBid matches.</li>
-        </ul>
+        <p class="mb-2">JudyBid Analyze™ helps your business review government bid opportunities before you spend time preparing a response. Enter your business profile, search or add an opportunity, and JudyBid will show fit signals, possible risks, and next steps.</p>
+        <p class="mt-1 text-slate-500 italic">JudyBid advises; the user decides.</p>
       </div>
     </details>
 
     <!-- JudyBid Disclaimer -->
     <section class="rounded-xl border border-amber-200/80 dark:border-amber-900/60 p-4 bg-amber-50 dark:bg-amber-950/30 shadow-sm text-sm text-amber-900 dark:text-amber-100">
-      <strong>JudyBid™ demo note:</strong> This prototype helps users match and understand public bid opportunities. It does not provide legal advice, guarantee award eligibility, certify compliance, or submit bids. Users must verify all deadlines, forms, addenda, eligibility requirements, and final submissions.
+      <strong>JudyBid Analyze™ note:</strong> JudyBid Analyze™ helps organize and explain public bid information and user-provided opportunity materials. It does not provide legal advice, guarantee awards, certify eligibility, submit bids, or replace procurement, legal, financial, or compliance review. Users remain responsible for verifying deadlines, forms, addenda, certifications, pricing, representations, and final submissions.
     </section>
 
-    <!-- Grid: Profile / Opportunity Sources -->
+    <!-- Grid: Profile / Opportunity Search -->
     <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <!-- Business Profile -->
       <form id="profileForm" class="lg:col-span-2 rounded-xl border border-slate-200/80 dark:border-slate-800 p-5 bg-white dark:bg-slate-900/60 shadow-sm space-y-4" data-testid="profile-form">
         <div class="flex items-start justify-between gap-4">
           <div>
             <h2 class="text-lg font-semibold">Business Profile</h2>
-            <p class="text-sm text-slate-500">Describe capabilities to compute better matches.</p>
+            <p class="text-sm text-slate-500">Tell us about your business to find the best-fit opportunities.</p>
           </div>
-          <button type="button" id="loadDemoProfile" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500">Load Demo</button>
+          <button type="button" id="loadExampleProfile" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500">Load Example Profile</button>
         </div>
 
         <div class="grid sm:grid-cols-2 gap-4">
@@ -141,28 +136,55 @@
         </div>
 
         <div class="flex items-center gap-3">
-          <button id="fetchBtn" type="button" class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500">Fetch Latest Opportunities</button>
-          <button id="matchBtn" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500">Run JudyBid Match</button>
           <span id="status" class="text-sm text-slate-500" aria-live="polite"></span>
+          <div hidden>
+            <button id="fetchBtn" type="button">Fetch</button>
+            <button id="matchBtn" type="button">Match</button>
+          </div>
         </div>
       </form>
 
-      <!-- Opportunity Sources -->
-      <div class="rounded-xl border border-slate-200/80 dark:border-slate-800 p-5 bg-white dark:bg-slate-900/60 shadow-sm space-y-4">
-        <h2 class="text-lg font-semibold">Opportunity Sources</h2>
-        <fieldset class="space-y-2">
-          <label class="flex items-center gap-2"><input type="checkbox" class="rounded" checked disabled /> <span>SAM.gov (needs backend)</span></label>
-          <label class="flex items-center gap-2"><input type="checkbox" class="rounded" checked /> <span>Mock: Federal IT & Services</span></label>
-          <label class="flex items-center gap-2"><input type="checkbox" class="rounded" /> <span>Mock: State & Local</span></label>
-          <label class="flex items-center gap-2"><input type="checkbox" class="rounded" /> <span>Mock: Education</span></label>
-        </fieldset>
-        <div class="space-y-2">
-          <label class="block text-sm font-medium">Custom opportunity feed URL (JSON/RSS via your backend)</label>
-          <input id="customFeed" placeholder="https://your-backend.tld/api/rfps" class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" />
-          <button id="addFeedBtn" class="mt-2 text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Add Source</button>
-          <ul id="feedsList" class="mt-2 text-sm text-slate-600 dark:text-slate-300 space-y-1"></ul>
+      <!-- Opportunity Search -->
+      <div class="rounded-xl border border-slate-200/80 dark:border-slate-800 p-5 bg-white dark:bg-slate-900/60 shadow-sm space-y-3">
+        <h2 class="text-lg font-semibold">Opportunity Search</h2>
+        <label class="block">
+          <span class="text-sm font-medium">Search Keywords</span>
+          <input id="searchKeyword" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-sm" placeholder="e.g. AI, cybersecurity, cloud" />
+        </label>
+        <label class="block">
+          <span class="text-sm font-medium">NAICS Code</span>
+          <input id="searchNaics" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-sm" placeholder="e.g. 541511" />
+        </label>
+        <label class="block">
+          <span class="text-sm font-medium">State / Location</span>
+          <input id="searchLocation" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-sm" placeholder="e.g. Maryland, DC, Virginia" />
+        </label>
+        <label class="block">
+          <span class="text-sm font-medium">Solicitation Type</span>
+          <select id="searchType" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-sm">
+            <option value="">All types</option>
+            <option value="Bid">Bid</option>
+            <option value="RFI/RFQ">RFI / RFQ</option>
+            <option value="IDIQ">IDIQ</option>
+            <option value="Grant">Grant</option>
+          </select>
+        </label>
+        <button id="searchBtn" class="w-full px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 text-sm font-medium">Search Opportunities</button>
+        <button id="exampleBtn" class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm">Load Example Opportunities</button>
+        <button id="manualAddBtn" class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm">Add Opportunity Manually ↓</button>
+        <div>
+          <span class="text-sm font-medium">Paste Opportunity Link</span>
+          <div class="mt-1 flex gap-2">
+            <input id="pasteLink" class="flex-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-sm" placeholder="https://sam.gov/opp/…" />
+            <button id="pasteLinkBtn" class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-sm">Add</button>
+          </div>
         </div>
-        <div class="text-xs text-slate-500">Live federal, state, and local sources typically require a backend for APIs, scraping, scheduling, and CORS handling. This Clean V1 prototype focuses on UI, profile intake, mock opportunities, and matching logic.</div>
+        <!-- Hidden: legacy feed elements retained for JS compatibility -->
+        <div hidden>
+          <input id="customFeed" />
+          <button id="addFeedBtn"></button>
+          <ul id="feedsList"></ul>
+        </div>
       </div>
     </section>
 
@@ -180,7 +202,7 @@
     <section class="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm overflow-hidden">
       <div class="flex items-center justify-between gap-3 p-4 border-b border-slate-200/80 dark:border-slate-800">
         <div class="flex items-center gap-3">
-          <h2 class="text-lg font-semibold">Results</h2>
+          <h2 class="text-lg font-semibold">Match Results</h2>
           <span id="resultCount" class="text-sm text-slate-500">0 found</span>
         </div>
         <div class="flex items-center gap-2">
@@ -208,7 +230,7 @@
       <button id="addRfpBtn" class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Add</button>
     </section>
 
-    <footer class="py-8 text-center text-sm text-slate-500">© <span id="year"></span> JudyBid™ — Client-side prototype. <span class="inline-block ml-2">JudyBid helps users understand opportunities, but users must verify final compliance and submission requirements.</span></footer>
+    <footer class="py-8 text-center text-sm text-slate-500">© <span id="year"></span> NOFA AI Factory — JudyBid Analyze™. JudyBid advises; the user decides.</footer>
   </main>
 
   <!-- Detail Modal -->
@@ -248,7 +270,7 @@
         setAsides: ["sbe"],
         vehicle: "Bid",
         link: "https://example.org/rfp/greenfield-chatbot",
-        source: "Mock: State & Local"
+        source: "State & Local"
       },
       {
         id: crypto.randomUUID(),
@@ -263,7 +285,7 @@
         setAsides: ["none"],
         vehicle: "Bid",
         link: "https://example.org/rfp/metrou-cv",
-        source: "Mock: Education"
+        source: "Education"
       },
       {
         id: crypto.randomUUID(),
@@ -278,7 +300,7 @@
         setAsides: ["sbe", "minority"],
         vehicle: "RFI/RFQ",
         link: "https://example.org/rfp/med-transcription",
-        source: "Mock: State & Local"
+        source: "State & Local"
       },
       {
         id: crypto.randomUUID(),
@@ -293,7 +315,7 @@
         setAsides: ["none", "8a"],
         vehicle: "IDIQ",
         link: "https://example.org/rfp/fed-data-idiq",
-        source: "Mock: Federal IT & Services"
+        source: "Federal IT & Services"
       },
       {
         id: crypto.randomUUID(),
@@ -308,7 +330,7 @@
         setAsides: ["sbe", "wosb"],
         vehicle: "Bid",
         link: "https://example.org/rfp/rvsd-web-chat",
-        source: "Mock: Education"
+        source: "Education"
       }
     ];
 
@@ -317,7 +339,7 @@
     function daysUntil(d) { const ms = new Date(d) - now(); return Math.ceil(ms / (1000*60*60*24)); }
 
     const State = {
-      mock: true,
+      useExamples: true,
       feeds: [],
       rfps: [...SAMPLE_RFPS],
       matches: [],
@@ -327,7 +349,7 @@
     };
 
     /*********************************
-     * Basic Heuristic “AI” Matcher  *
+     * Bid Fit Scorer                 *
      *********************************/
     const Weights = {
       keyword: 0.45,
@@ -433,7 +455,7 @@
       async explain(profile, rfp, parts) {
         // Example: POST to /api/explain for a natural‑language rationale
         // return fetch('/api/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, rfp, parts })}).then(r=>r.text());
-        return `JudyBid prioritizes capability keyword overlap (${(parts.keyword*100).toFixed(0)}%), NAICS alignment, budget fit, and due date proximity. Add a backend LLM for richer bid analysis, compliance checklists, and response outlines.`;
+        return `JudyBid Analyze prioritizes capability keyword overlap (${(parts.keyword*100).toFixed(0)}%), NAICS alignment, budget fit, and due date proximity. Connect a custom endpoint for richer bid analysis, compliance checklists, and response outlines.`;
       }
     };
 
@@ -471,7 +493,7 @@
       $('#resultCount').textContent = `${list.length} found`;
 
       if (!list.length) {
-        resultsEl.innerHTML = `<div class="p-6 text-sm text-slate-500">No results yet. Click <b>Fetch Latest Opportunities</b> then <b>Run JudyBid Match</b>.</div>`;
+        resultsEl.innerHTML = `<div class="p-6 text-sm text-slate-500">No results yet. Use <b>Search Opportunities</b> or <b>Load Example Opportunities</b> to get started.</div>`;
         return;
       }
 
@@ -539,8 +561,8 @@
      * Actions                       *
      *********************************/
     async function fetchRFPs() {
-      $('#status').textContent = State.mock ? 'Loaded mock opportunities.' : 'Fetching opportunities from sources…';
-      if (State.mock) {
+      $('#status').textContent = State.useExamples ? 'Loaded example opportunities.' : 'Fetching opportunities from custom feeds…';
+      if (State.useExamples) {
         State.rfps = [...SAMPLE_RFPS];
         persistLocal();
         return;
@@ -576,8 +598,49 @@
       $('#status').textContent = `Matched ${scored.length} opportunities for \"${profile.name}\".`;
     }
 
+    function applySearch() {
+      const keyword = ($('#searchKeyword')?.value || '').trim().toLowerCase();
+      const naicsRaw = ($('#searchNaics')?.value || '').trim();
+      const naics = parseInt(naicsRaw, 10);
+      const loc = ($('#searchLocation')?.value || '').trim().toLowerCase();
+      const type = $('#searchType')?.value || '';
+      if (!State.rfps.length) { State.useExamples = true; State.rfps = [...SAMPLE_RFPS]; }
+      const profile = readProfile();
+      State.profile = profile;
+      const scored = State.rfps
+        .filter(rfp => {
+          if (keyword && !rfp.title.toLowerCase().includes(keyword) &&
+              !rfp.summary.toLowerCase().includes(keyword) &&
+              !rfp.keywords.some(k => k.toLowerCase().includes(keyword))) return false;
+          if (naicsRaw && !isNaN(naics) && !rfp.naics.includes(naics)) return false;
+          if (loc && !rfp.location.toLowerCase().includes(loc)) return false;
+          if (type && rfp.vehicle !== type) return false;
+          return true;
+        })
+        .map(rfp => { const { score, parts } = computeScore(profile, rfp); return { rfp, score, parts }; });
+      State.matches = scored;
+      renderResults();
+      persistLocal();
+      $('#status').textContent = `Found ${scored.length} opportunit${scored.length === 1 ? 'y' : 'ies'}.`;
+    }
+
+    function handlePasteLink() {
+      const link = ($('#pasteLink')?.value || '').trim();
+      if (!link) return;
+      State.rfps.push({
+        id: crypto.randomUUID(), title: 'Opportunity from Link', agency: 'Unknown Agency',
+        summary: 'Added from pasted link. Use Quick Add below to fill in details.',
+        keywords: [], naics: [], location: '', dueDate: addDays(now(), 21),
+        minBudget: 0, maxBudget: 0, setAsides: ['none'], vehicle: 'Bid', link, source: 'Pasted Link'
+      });
+      $('#pasteLink').value = '';
+      $('#status').textContent = 'Opportunity added from link.';
+      persistLocal();
+      runMatch();
+    }
+
     function persistLocal() {
-      const blob = { mock: State.mock, feeds: State.feeds, rfps: State.rfps, profile: State.profile };
+      const blob = { useExamples: State.useExamples, feeds: State.feeds, rfps: State.rfps, profile: State.profile };
       localStorage.setItem('judybid-ai', JSON.stringify(blob));
     }
 
@@ -585,7 +648,7 @@
       try {
         const raw = localStorage.getItem('judybid-ai'); if (!raw) return;
         const blob = JSON.parse(raw);
-        State.mock = !!blob.mock;
+        State.useExamples = !!blob.useExamples;
         State.feeds = blob.feeds || [];
         State.rfps = blob.rfps?.length ? blob.rfps.map(r=>({ ...r, dueDate: r.dueDate })) : [...SAMPLE_RFPS];
         if (blob.profile) fillProfile(blob.profile);
@@ -653,11 +716,11 @@
         localStorage.setItem('judybid-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
       });
 
-      // Mock toggle
-      const mockBtn = $('#mockToggle');
-      const syncMockLabel = () => mockBtn.textContent = `Mock Data: ${State.mock ? 'On' : 'Off'}`;
-      syncMockLabel();
-      mockBtn.addEventListener('click', () => { State.mock = !State.mock; syncMockLabel(); persistLocal(); });
+      // Example Opportunities toggle
+      const exampleToggleBtn = $('#exampleToggle');
+      const syncExampleLabel = () => exampleToggleBtn.textContent = `Example Opportunities: ${State.useExamples ? 'On' : 'Off'}`;
+      syncExampleLabel();
+      exampleToggleBtn.addEventListener('click', () => { State.useExamples = !State.useExamples; syncExampleLabel(); persistLocal(); });
 
       // Feeds
       $('#addFeedBtn').addEventListener('click', (e) => {
@@ -667,7 +730,7 @@
       });
 
       // Profile helpers
-      $('#loadDemoProfile').addEventListener('click', () => {
+      $('#loadExampleProfile').addEventListener('click', () => {
         fillProfile({
           name: 'NOFA Business Consulting, LLC',
           industry: 'IT & Software',
@@ -684,6 +747,12 @@
       // Fetch + Match
       $('#fetchBtn').addEventListener('click', fetchRFPs);
       $('#matchBtn').addEventListener('click', runMatch);
+
+      // Opportunity Search panel
+      $('#searchBtn').addEventListener('click', applySearch);
+      $('#exampleBtn').addEventListener('click', async () => { State.useExamples = true; await fetchRFPs(); await runMatch(); });
+      $('#manualAddBtn').addEventListener('click', () => { const t = $('#addTitle'); t.scrollIntoView({ behavior: 'smooth' }); setTimeout(() => t.focus(), 300); });
+      $('#pasteLinkBtn').addEventListener('click', handlePasteLink);
 
       // Filters
       $$('.filter-chip').forEach(chip => chip.addEventListener('click', () => {
@@ -758,7 +827,7 @@
   <noscript>
     <div class="no-tailwind-fallback">
       <h1>JudyBid™</h1>
-      <p>This prototype requires JavaScript.</p>
+      <p>This application requires JavaScript.</p>
     </div>
   </noscript>
 </body>
