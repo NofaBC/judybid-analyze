@@ -149,9 +149,10 @@
             <textarea name="capStatement" rows="4" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-sm" placeholder="Paste the text of your capability statement here…"></textarea>
           </label>
           <label class="block">
-            <span class="text-sm font-medium">Upload Capability Statement <span class="text-xs text-slate-400 font-normal">(PDF, DOCX — coming soon)</span></span>
-            <input type="file" accept=".pdf,.docx,.doc,.txt" disabled class="mt-1 block text-sm text-slate-400 cursor-not-allowed" />
-            <p class="text-xs text-slate-400 mt-1">File parsing will be available in a future update.</p>
+            <span class="text-sm font-medium">Upload Capability Statement</span>
+            <!-- File content extraction is a future enhancement; filename is stored as a readiness signal -->
+            <input type="file" id="capStatementFile" accept=".pdf,.docx,.doc,.txt" class="mt-1 block text-sm text-slate-600 dark:text-slate-300 w-full cursor-pointer" />
+            <p id="capFileLabel" class="text-xs text-slate-400 mt-1 hidden"></p>
           </label>
         </div>
 
@@ -482,6 +483,350 @@
       return { score: +(total * 100).toFixed(1), parts };
     }
 
+    /*********************************
+     * JudyBid Matching Engine       *
+     *********************************/
+
+    /** Reads the current business profile from the form. */
+    function getBusinessProfile() {
+      return readProfile();
+    }
+
+    /** Reads capability statement input: pasted text + uploaded file metadata. */
+    function getCapabilityStatementInput() {
+      const f = $('#profileForm');
+      const text = (f?.elements['capStatement']?.value || '').trim();
+      // File content extraction is a future enhancement; filename is a readiness signal only.
+      const fileInput = $('#capStatementFile');
+      const file = fileInput?.files?.[0] || null;
+      return { text, fileName: file?.name || null, hasFile: !!file };
+    }
+
+    /**
+     * Combines the business profile and capability statement into a unified
+     * signals object. Enriches with NAICS codes, set-aside terms, location
+     * mentions, and keywords inferred from the capability statement text.
+     */
+    function extractProfileSignals(profile, capInput) {
+      const capText = capInput.text || '';
+      const capTokens = unique(tokenize(capText));
+      const capNaics = (capText.match(/\b(\d{6})\b/g) || []).map(n => parseInt(n, 10));
+
+      const inferredSetAsides = [];
+      if (/\bsmall[\s-]*business\b/i.test(capText)) inferredSetAsides.push('sbe');
+      if (/\b(woman[\s-]*owned|women[\s-]*owned|wosb)\b/i.test(capText)) inferredSetAsides.push('wosb');
+      if (/\b(veteran[\s-]*owned|sdvosb|vosb)\b/i.test(capText)) inferredSetAsides.push('veteran');
+      if (/\b(minority[\s-]*owned|mbe|8\(?a\)?)\b/i.test(capText)) inferredSetAsides.push('8a', 'minority');
+
+      const stateNames = ['alabama','alaska','arizona','arkansas','california','colorado','connecticut','delaware','florida','georgia','hawaii','idaho','illinois','indiana','iowa','kansas','kentucky','louisiana','maine','maryland','massachusetts','michigan','minnesota','mississippi','missouri','montana','nebraska','nevada','new hampshire','new jersey','new mexico','new york','north carolina','north dakota','ohio','oklahoma','oregon','pennsylvania','rhode island','south carolina','south dakota','tennessee','texas','utah','vermont','virginia','washington','west virginia','wisconsin','wyoming','district of columbia'];
+      const stateAbbrs = ['al','ak','az','ar','ca','co','ct','de','fl','ga','hi','id','il','in','ia','ks','ky','la','me','md','ma','mi','mn','ms','mo','mt','ne','nv','nh','nj','nm','ny','nc','nd','oh','ok','or','pa','ri','sc','sd','tn','tx','ut','vt','va','wa','wv','wi','wy','dc'];
+      const capLow = capText.toLowerCase();
+      const capLocations = unique([
+        ...stateNames.filter(s => capLow.includes(s)),
+        ...stateAbbrs.filter(s => new RegExp('\\b' + s + '\\b').test(capLow))
+      ]);
+
+      return {
+        name: profile.name,
+        industry: profile.industry,
+        location: profile.location,
+        naics: unique([...profile.naics, ...capNaics]),
+        setAside: profile.setAside,
+        inferredSetAsides: unique([profile.setAside !== 'none' ? profile.setAside : null, ...inferredSetAsides].filter(Boolean)),
+        contractTypes: profile.contractTypes || [],
+        minBudget: profile.minBudget,
+        maxBudget: profile.maxBudget,
+        keywords: unique([...profile.capabilities, ...capTokens]),
+        profileKeywords: profile.capabilities,
+        capKeywords: capTokens,
+        capLocations,
+        hasCapStatement: capText.length > 30,
+        capFileName: capInput.fileName,
+      };
+    }
+
+    /**
+     * Returns the current opportunity pool.
+     * Loads example opportunities automatically if the pool is empty.
+     * Future: replace or extend this function to fetch from an API endpoint.
+     */
+    function getOpportunityPool() {
+      if (!State.rfps.length) {
+        State.useExamples = true;
+        State.rfps = [...SAMPLE_RFPS];
+      }
+      return State.rfps;
+    }
+
+    /**
+     * Scores a single opportunity against the unified profile signals.
+     * Returns { score (0–100), parts, matchedNaics, matchedKeywords }.
+     */
+    function scoreOpportunityAgainstProfile(opp, signals) {
+      const rfpTokens = unique([
+        ...opp.keywords.map(k => k.toLowerCase()),
+        ...tokenize(opp.summary),
+        ...tokenize(opp.title)
+      ]);
+
+      // Keyword match against merged profile + capability statement keywords
+      const matchedKeywords = signals.keywords.filter(k => rfpTokens.includes(k)).slice(0, 10);
+      const keywordScore = signals.keywords.length
+        ? Math.min(1, matchedKeywords.length / Math.max(4, Math.min(signals.keywords.length, 20)))
+        : 0;
+
+      // NAICS alignment
+      const matchedNaics = (opp.naics || []).filter(n => signals.naics.includes(n));
+      const naicsScore = matchedNaics.length > 0 ? 1 : 0;
+
+      // Set-aside fit
+      let setAsideScore = 0.2;
+      if (opp.setAsides?.includes('none')) {
+        setAsideScore = 0.4; // open competition
+      } else if (opp.setAsides?.length) {
+        setAsideScore = signals.inferredSetAsides.some(s => opp.setAsides.includes(s)) ? 1 : 0;
+      }
+
+      // Location fit
+      let locationScore = 0.2;
+      if (signals.location) {
+        const oppLoc = (opp.location || '').toLowerCase();
+        if (oppLoc.includes(signals.location)) {
+          locationScore = 1;
+        } else {
+          const profileState = signals.location.split(',')[1]?.trim() || signals.location.trim();
+          if (profileState && oppLoc.includes(profileState)) locationScore = 0.6;
+          else if (signals.capLocations.some(loc => oppLoc.includes(loc))) locationScore = 0.4;
+          else locationScore = 0.1;
+        }
+      }
+
+      // Budget fit
+      let budgetScore = 0.3;
+      if (opp.minBudget || opp.maxBudget) {
+        const within = (!opp.minBudget || opp.minBudget <= signals.maxBudget) &&
+                       (!opp.maxBudget || opp.maxBudget >= signals.minBudget);
+        if (!within) {
+          budgetScore = 0;
+        } else {
+          const rRange = (opp.maxBudget || opp.minBudget || 1) - (opp.minBudget || 0);
+          const pRange = (signals.maxBudget || 1) - (signals.minBudget || 0);
+          budgetScore = Math.max(0.2, Math.min(1, Math.min(rRange, pRange) / Math.max(rRange, pRange || 1)));
+        }
+      }
+
+      // Contract type fit
+      let contractScore = 0.5;
+      if (signals.contractTypes.length && opp.vehicle) {
+        const veh = opp.vehicle.toLowerCase();
+        contractScore = signals.contractTypes.some(ct =>
+          veh.includes(ct.toLowerCase().replace(/[\u2011]/g, '-'))
+        ) ? 1 : 0.1;
+      }
+
+      // Due-date urgency (scoring signal only, not a hard filter)
+      const d = daysUntil(opp.dueDate);
+      const urgencyScore = isNaN(d) ? 0.3 : d <= 0 ? 0 : d <= 7 ? 0.9 : d <= 14 ? 0.7 : d <= 30 ? 0.5 : 0.2;
+
+      const parts = { keyword: keywordScore, naics: naicsScore, setAside: setAsideScore, location: locationScore, budget: budgetScore, contract: contractScore, urgency: urgencyScore };
+      const weights = { keyword: 0.38, naics: 0.20, setAside: 0.10, location: 0.08, budget: 0.12, contract: 0.04, urgency: 0.08 };
+      const total = Object.keys(weights).reduce((s, k) => s + (parts[k] || 0) * weights[k], 0);
+      return { score: +(total * 100).toFixed(1), parts, matchedNaics, matchedKeywords };
+    }
+
+    /**
+     * Produces human-readable match explanations for a single opportunity.
+     * Returns { relevant, concerns, review, chips }.
+     */
+    function explainMatch(opp, signals, scoreData) {
+      const { parts, matchedNaics, matchedKeywords } = scoreData;
+      const days = daysUntil(opp.dueDate);
+
+      // Why relevant
+      const positives = [];
+      if (matchedKeywords.length) positives.push(`capability keywords (${matchedKeywords.slice(0, 4).join(', ')})`);
+      if (matchedNaics.length) positives.push(`NAICS ${matchedNaics.join(', ')}`);
+      if (parts.location > 0.5) positives.push(`${opp.location} service area`);
+      if (parts.setAside >= 0.8) positives.push(signals.setAside.toUpperCase() + ' eligibility');
+      if (parts.budget > 0.4 && (opp.minBudget || opp.maxBudget)) positives.push(`budget range`);
+      const relevant = positives.length
+        ? `JudyBid found matching signals in your ${positives.join(', ')}.`
+        : `This opportunity is included based on your overall profile. Review the full solicitation to assess fit.`;
+
+      // Possible concerns
+      const concerns = [];
+      if (!isNaN(days) && days <= 0) concerns.push(`Deadline may have passed — verify current status before proceeding.`);
+      else if (!isNaN(days) && days <= 7) concerns.push(`Deadline in ${days} day${days === 1 ? '' : 's'} — limited time to prepare a response.`);
+      if (parts.naics === 0 && opp.naics?.length) concerns.push(`Your NAICS codes do not directly match this solicitation (${opp.naics.join(', ')}). Confirm eligibility.`);
+      if (parts.setAside === 0 && opp.setAsides?.length && !opp.setAsides.includes('none')) {
+        concerns.push(`This solicitation has set-aside requirements (${opp.setAsides.filter(s=>s!=='none').join(', ')}) not reflected in your profile.`);
+      }
+      if (parts.budget === 0 && (opp.minBudget || opp.maxBudget)) {
+        concerns.push(`Budget range ($${(opp.minBudget||0).toLocaleString()}–$${(opp.maxBudget||0).toLocaleString()}) may fall outside your stated range.`);
+      }
+      if (parts.location < 0.3 && opp.location) concerns.push(`Location (${opp.location}) may be outside your primary service area — confirm whether remote or on-site work applies.`);
+      if (!signals.hasCapStatement) concerns.push(`Adding a capability statement may improve match quality.`);
+
+      // Review guidance
+      const review = `Review the full solicitation for eligibility requirements, addenda, certifications, and submission instructions. JudyBid advises; the user decides.`;
+
+      // Signal chips
+      const chips = [];
+      if (matchedNaics.length) chips.push({ label: `NAICS ${matchedNaics.join(', ')}`, type: 'positive' });
+      if (matchedKeywords.length) chips.push({ label: matchedKeywords.slice(0, 4).join(', '), type: 'neutral' });
+      if (parts.location > 0.5) chips.push({ label: `\uD83D\uDCCD ${opp.location}`, type: 'positive' });
+      if (parts.setAside >= 0.8) chips.push({ label: `\u2713 Eligibility match`, type: 'positive' });
+      if (!isNaN(days) && days <= 14 && days > 0) chips.push({ label: `\u26A1 Due in ${days}d`, type: 'warning' });
+      if (parts.budget === 0 && (opp.minBudget || opp.maxBudget)) chips.push({ label: `\u26A0 Budget gap`, type: 'warning' });
+      if (parts.naics === 0 && opp.naics?.length) chips.push({ label: `\u26A0 NAICS mismatch`, type: 'warning' });
+      if (parts.setAside === 0 && opp.setAsides?.length && !opp.setAsides.includes('none')) chips.push({ label: `\u26A0 Eligibility check`, type: 'warning' });
+
+      return { relevant, concerns, review, chips };
+    }
+
+    /**
+     * Filters and ranks opportunities against profile signals.
+     * overrides: optional { keyword, naics, location, type } from Advanced Search Filters.
+     * Future: pool can be swapped for API-sourced or imported opportunities.
+     */
+    function rankOpportunities(pool, signals, overrides = {}) {
+      return pool
+        .filter(opp => {
+          if (overrides.keyword) {
+            const toks = tokenize(overrides.keyword);
+            const rfpToks = [...tokenize(opp.title), ...tokenize(opp.summary), ...opp.keywords.map(k=>k.toLowerCase())];
+            if (!toks.some(t => rfpToks.includes(t))) return false;
+          }
+          if (overrides.naics) {
+            const n = parseInt(overrides.naics, 10);
+            if (!isNaN(n) && !opp.naics.includes(n)) return false;
+          }
+          if (overrides.location && !(opp.location||'').toLowerCase().includes(overrides.location.toLowerCase())) return false;
+          if (overrides.type && opp.vehicle !== overrides.type) return false;
+          return true;
+        })
+        .map(opp => {
+          const scoreData = scoreOpportunityAgainstProfile(opp, signals);
+          const explanation = explainMatch(opp, signals, scoreData);
+          const fitLabel = scoreData.score >= 75 ? 'Strong fit'
+            : scoreData.score >= 55 ? 'Possible fit'
+            : scoreData.score >= 35 ? 'Weak fit'
+            : 'Needs review';
+          return { rfp: opp, score: scoreData.score, parts: scoreData.parts, fitLabel, explanation };
+        })
+        .sort((a, b) => b.score - a.score);
+    }
+
+    /**
+     * Renders ranked match results using the rich card format.
+     * Called by renderResults() when explanation data is present, and directly by findByProfile().
+     */
+    function renderMatchResults(matches) {
+      const resultsEl = $('#results');
+      let list = [...matches];
+
+      list = list.filter(item => {
+        const { rfp, parts } = item;
+        if (State.filters.dueSoon && daysUntil(rfp.dueDate) > 14) return false;
+        if (State.filters.setAside && !(parts.setAside > 0)) return false;
+        if (State.filters.budgetFit && !(parts.budget > 0.2)) return false;
+        if (State.filters.naicsFit && !(parts.naics > 0)) return false;
+        return true;
+      });
+
+      if (State.sortBy === 'score') list.sort((a, b) => b.score - a.score);
+      else if (State.sortBy === 'dueDate') list.sort((a, b) => new Date(a.rfp.dueDate) - new Date(b.rfp.dueDate));
+      else if (State.sortBy === 'budget') list.sort((a, b) => (b.rfp.maxBudget||0) - (a.rfp.maxBudget||0));
+
+      $('#resultCount').textContent = `${list.length} found`;
+
+      if (!list.length) {
+        resultsEl.innerHTML = `<div class="p-6 text-sm text-slate-500">No results yet. Click <b>Find Opportunities Using My Business Profile</b> or <b>Load Example Opportunities</b> to get started.</div>`;
+        return;
+      }
+
+      const fitClass = {
+        'Strong fit':   'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300',
+        'Possible fit': 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-300',
+        'Weak fit':     'bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-300',
+        'Needs review': 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300',
+      };
+      const chipClass = {
+        positive: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800',
+        neutral:  'bg-slate-100 dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700 text-slate-700 dark:text-slate-300',
+        warning:  'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800',
+      };
+
+      resultsEl.innerHTML = list.map(({ rfp, score, parts, fitLabel, explanation }) => `
+        <article class="p-4 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex-1 min-w-0">
+              <h3 class="font-semibold leading-tight">${rfp.title}</h3>
+              <div class="text-sm text-slate-600 dark:text-slate-300 mt-0.5">${rfp.agency} • <span>${rfp.location}</span> • <span>${rfp.vehicle}</span></div>
+            </div>
+            <div class="text-right flex-shrink-0">
+              <div class="text-2xl font-bold tabular-nums">${Math.round(score)}<span class="text-sm font-normal text-slate-500">%</span></div>
+              <span class="inline-block mt-0.5 text-xs px-2 py-0.5 rounded-full font-medium ${fitClass[fitLabel] || fitClass['Needs review']}">${fitLabel}</span>
+              <div class="text-xs text-slate-500 mt-1">Due ${fmtDate(rfp.dueDate)} (${daysUntil(rfp.dueDate)}d)</div>
+            </div>
+          </div>
+          <div class="mt-3 p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/60">
+            <div class="text-xs font-semibold text-emerald-800 dark:text-emerald-300 mb-1">Why this looks relevant</div>
+            <p class="text-sm text-emerald-900 dark:text-emerald-200">${explanation.relevant}</p>
+          </div>
+          ${explanation.concerns.length ? `
+          <div class="mt-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/60">
+            <div class="text-xs font-semibold text-amber-800 dark:text-amber-300 mb-1">Possible concerns</div>
+            <ul class="text-sm text-amber-900 dark:text-amber-200 space-y-0.5">${explanation.concerns.map(c => `<li>\u2022 ${c}</li>`).join('')}</ul>
+          </div>` : ''}
+          <div class="mt-2 flex flex-wrap gap-1.5 text-xs">
+            ${(explanation.chips||[]).map(c => `<span class="px-2 py-1 rounded-full ${chipClass[c.type]||chipClass.neutral}">${c.label}</span>`).join('')}
+          </div>
+          <div class="mt-3 flex items-center justify-between">
+            <div class="text-xs text-slate-500">Budget: ${rfp.minBudget ? `$${rfp.minBudget.toLocaleString()}` : '\u2014'} \u2013 ${rfp.maxBudget ? `$${rfp.maxBudget.toLocaleString()}` : '\u2014'} \u2022 Source: ${rfp.source}</div>
+            <div class="flex items-center gap-2">
+              <button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-detail="${rfp.id}">Details</button>
+              <a class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500" href="${rfp.link}" target="_blank" rel="noopener">Open</a>
+            </div>
+          </div>
+          <p class="mt-2 text-xs text-slate-400 italic">${explanation.review}</p>
+        </article>
+      `).join('');
+
+      $$('#results [data-detail]').forEach(btn => btn.addEventListener('click', () => openDetail(btn.getAttribute('data-detail'))));
+    }
+
+    /**
+     * Main entry point for “Find Opportunities Using My Business Profile”.
+     * Runs the full pipeline: profile → signals → rank → render.
+     */
+    function findByProfile() {
+      const profile = getBusinessProfile();
+      const capInput = getCapabilityStatementInput();
+      const signals = extractProfileSignals(profile, capInput);
+      State.profile = profile;
+
+      const pool = getOpportunityPool();
+      const overrides = {
+        keyword: ($('#searchKeyword')?.value || '').trim(),
+        naics:   ($('#searchNaics')?.value   || '').trim(),
+        location:($('#searchLocation')?.value|| '').trim(),
+        type:    $('#searchType')?.value      || '',
+      };
+
+      const ranked = rankOpportunities(pool, signals, overrides);
+      State.matches = ranked;
+      persistLocal();
+      renderMatchResults(ranked);
+
+      const strong   = ranked.filter(r => r.fitLabel === 'Strong fit').length;
+      const possible = ranked.filter(r => r.fitLabel === 'Possible fit').length;
+      let msg = `Reviewed ${ranked.length} opportunit${ranked.length === 1 ? 'y' : 'ies'} for ${profile.name}.`;
+      if (strong)        msg += ` ${strong} strong fit${strong   > 1 ? 's' : ''}.`;
+      else if (possible) msg += ` ${possible} possible fit${possible > 1 ? 's' : ''}.`;
+      $('#status').textContent = msg;
+    }
+
     // Optional LLM hook (backend required). Replace with your endpoint.
     const LLM = {
       enabled: false,
@@ -510,6 +855,11 @@
     }
 
     function renderResults() {
+      // Delegate to rich card rendering when explanation data is present (from findByProfile)
+      if (State.matches.length && State.matches[0].explanation) {
+        renderMatchResults(State.matches);
+        return;
+      }
       const resultsEl = $('#results');
       let list = [...State.matches];
 
@@ -768,6 +1118,14 @@
         State.feeds.push(url); $('#customFeed').value = ''; renderFeeds(); persistLocal();
       });
 
+      // Capability statement file upload — display filename as a readiness signal
+      $('#capStatementFile')?.addEventListener('change', () => {
+        const file = $('#capStatementFile').files[0];
+        const lbl = $('#capFileLabel');
+        if (file && lbl) { lbl.textContent = `Attached: ${file.name}`; lbl.classList.remove('hidden'); }
+        else if (lbl) lbl.classList.add('hidden');
+      });
+
       // Reset profile
       $('#resetProfileBtn').addEventListener('click', () => {
         $('#profileForm').reset();
@@ -796,7 +1154,7 @@
       $('#matchBtn').addEventListener('click', runMatch);
 
       // Opportunity Search panel
-      $('#searchBtn').addEventListener('click', applySearch);
+      $('#searchBtn').addEventListener('click', findByProfile);
       $('#exampleBtn').addEventListener('click', async () => { State.useExamples = true; await fetchRFPs(); await runMatch(); });
       $('#manualAddBtn').addEventListener('click', () => { const t = $('#addTitle'); t.scrollIntoView({ behavior: 'smooth' }); setTimeout(() => t.focus(), 300); });
       $('#pasteLinkBtn').addEventListener('click', handlePasteLink);
