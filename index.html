@@ -1,0 +1,765 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>JudyBid™ — Single-File Prototype</title>
+  <meta name="description" content="JudyBid™ helps small businesses review, match, and understand government bid opportunities using a lightweight client-side prototype with optional backend/LLM hooks." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tailwind config: enable dark mode via class
+    tailwind.config = { darkMode: 'class' };
+  </script>
+  <style>
+    /* Fallback styles if Tailwind CDN is blocked */
+    .tw-hidden-if-no-tailwind { display: none; }
+    .no-tailwind-fallback { font: 16px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial; padding: 1rem; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors">
+  <!-- App Shell -->
+  <header class="sticky top-0 z-40 backdrop-blur supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-slate-900/60 border-b border-slate-200/70 dark:border-slate-800">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
+      <div class="flex items-center gap-3">
+        <svg width="28" height="28" viewBox="0 0 24 24" class="text-indigo-600 dark:text-indigo-400" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 14.59L8.41 12 10 10.41l3 3 5-5L19.59 10Z"/></svg>
+        <h1 class="text-xl sm:text-2xl font-semibold tracking-tight">JudyBid™</h1>
+        <span class="text-xs px-2 py-0.5 rounded-full bg-indigo-600/10 text-indigo-700 dark:text-indigo-300">prototype</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="mockToggle" class="px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 text-sm" aria-pressed="true" title="Toggle Mock Data Mode (no backend required)">Mock Data: On</button>
+        <button id="exportBtn" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-sm">Export</button>
+        <button id="clearBtn" class="px-3 py-1.5 rounded-lg border border-slate-300/60 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 text-sm">Clear</button>
+        <button id="themeBtn" class="p-2 rounded-lg border border-slate-300/60 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800" title="Toggle dark mode" aria-label="Toggle theme">
+          <svg id="sunIcon" class="h-5 w-5 hidden dark:block" viewBox="0 0 24 24" fill="currentColor"><path d="M6.76 4.84l-1.8-1.79L3.17 4.84l1.79 1.8 1.8-1.8zM1 13h3v-2H1v2zm10 10h2v-3h-2v3zM4.84 20.83l1.8-1.79-1.8-1.8-1.67 1.67 1.67 1.92zM20 11V9h3v2h-3zm-1.76-6.16l1.8-1.79L23 4.84l-1.79 1.8-1.97-1.8zM11 1h2v3h-2V1zm8.16 19.83l1.67-1.92-1.8-1.8-1.8 1.79 1.93 1.93zM12 6.5A5.5 5.5 0 1 1 6.5 12 5.507 5.507 0 0 1 12 6.5z"/></svg>
+          <svg id="moonIcon" class="h-5 w-5 dark:hidden" viewBox="0 0 24 24" fill="currentColor"><path d="M21.64 13a9 9 0 1 1-10.63-10.6 1 1 0 0 1 1.11.27A7 7 0 1 0 21.37 12a1 1 0 0 1 .27 1.11z"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+    <!-- Intro / How it works -->
+    <details class="group rounded-xl border border-slate-200/80 dark:border-slate-800 p-5 bg-white dark:bg-slate-900/60 shadow-sm">
+      <summary class="cursor-pointer flex items-center gap-2">
+        <svg class="w-5 h-5 text-indigo-600 dark:text-indigo-300" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2Zm1 14.59L8.41 12 10 10.41l3 3 5-5L19.59 10Z"/></svg>
+        <span class="font-medium">How it works</span>
+      </summary>
+      <div class="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">
+        <p class="mb-2">This single-file JudyBid™ prototype lets you define a <strong>Business Profile</strong>, choose government <strong>Opportunity Sources</strong>, pull mock opportunities, and compute a <strong>JudyBid match score</strong> using a transparent heuristic. You can wire in a backend or LLM later via the <code>LLM.match()</code> stub.</p>
+        <ul class="list-disc pl-5 space-y-1">
+          <li><b>Mock mode On</b> (default): uses bundled sample government opportunities.</li>
+          <li><b>Mock mode Off</b>: attempts to fetch from your custom endpoints (requires CORS‑enabled backend).</li>
+          <li><b>Export</b>: download JSON/CSV of the ranked JudyBid matches.</li>
+        </ul>
+      </div>
+    </details>
+
+    <!-- JudyBid Disclaimer -->
+    <section class="rounded-xl border border-amber-200/80 dark:border-amber-900/60 p-4 bg-amber-50 dark:bg-amber-950/30 shadow-sm text-sm text-amber-900 dark:text-amber-100">
+      <strong>JudyBid™ demo note:</strong> This prototype helps users match and understand public bid opportunities. It does not provide legal advice, guarantee award eligibility, certify compliance, or submit bids. Users must verify all deadlines, forms, addenda, eligibility requirements, and final submissions.
+    </section>
+
+    <!-- Grid: Profile / Opportunity Sources -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Business Profile -->
+      <form id="profileForm" class="lg:col-span-2 rounded-xl border border-slate-200/80 dark:border-slate-800 p-5 bg-white dark:bg-slate-900/60 shadow-sm space-y-4" data-testid="profile-form">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-lg font-semibold">Business Profile</h2>
+            <p class="text-sm text-slate-500">Describe capabilities to compute better matches.</p>
+          </div>
+          <button type="button" id="loadDemoProfile" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500">Load Demo</button>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block">
+            <span class="text-sm font-medium">Business Name</span>
+            <input name="name" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" placeholder="Acme Tech Services" required />
+          </label>
+          <label class="block">
+            <span class="text-sm font-medium">Primary Industry</span>
+            <select name="industry" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2">
+              <option>IT & Software</option>
+              <option>Healthcare</option>
+              <option>Construction</option>
+              <option>Professional Services</option>
+              <option>Education</option>
+              <option>Security</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="grid sm:grid-cols-3 gap-4">
+          <label class="block">
+            <span class="text-sm font-medium">Location</span>
+            <input name="location" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" placeholder="Gaithersburg, MD" />
+          </label>
+          <label class="block">
+            <span class="text-sm font-medium">NAICS (comma‑separated)</span>
+            <input name="naics" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" placeholder="541511, 541512" />
+          </label>
+          <label class="block">
+            <span class="text-sm font-medium">Set‑Aside Eligibility</span>
+            <select name="setAside" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2">
+              <option value="none">None</option>
+              <option value="sbe">Small Business</option>
+              <option value="wosb">Women‑Owned (WOSB)</option>
+              <option value="veteran">Veteran‑Owned</option>
+              <option value="minority">Minority‑Owned</option>
+              <option value="8a">SBA 8(a)</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block">
+            <span class="text-sm font-medium">Capabilities (keywords)</span>
+            <textarea name="capabilities" rows="3" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" placeholder="AI, chatbots, RAG, computer vision, data engineering, web apps, cloud, security"></textarea>
+          </label>
+          <div class="grid grid-cols-2 gap-4">
+            <label class="block">
+              <span class="text-sm font-medium">Min Budget ($)</span>
+              <input name="minBudget" type="number" min="0" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" placeholder="10000" />
+            </label>
+            <label class="block">
+              <span class="text-sm font-medium">Max Budget ($)</span>
+              <input name="maxBudget" type="number" min="0" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" placeholder="250000" />
+            </label>
+            <label class="block col-span-2">
+              <span class="text-sm font-medium">Contract Types</span>
+              <select name="contractTypes" multiple class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2">
+                <option>Fixed‑Price</option>
+                <option>Time & Materials</option>
+                <option>IDIQ</option>
+                <option>BPA</option>
+                <option>Grant</option>
+              </select>
+              <p class="text-xs text-slate-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
+            </label>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <button id="fetchBtn" type="button" class="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500">Fetch Latest Opportunities</button>
+          <button id="matchBtn" type="button" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500">Run JudyBid Match</button>
+          <span id="status" class="text-sm text-slate-500" aria-live="polite"></span>
+        </div>
+      </form>
+
+      <!-- Opportunity Sources -->
+      <div class="rounded-xl border border-slate-200/80 dark:border-slate-800 p-5 bg-white dark:bg-slate-900/60 shadow-sm space-y-4">
+        <h2 class="text-lg font-semibold">Opportunity Sources</h2>
+        <fieldset class="space-y-2">
+          <label class="flex items-center gap-2"><input type="checkbox" class="rounded" checked disabled /> <span>SAM.gov (needs backend)</span></label>
+          <label class="flex items-center gap-2"><input type="checkbox" class="rounded" checked /> <span>Mock: Federal IT & Services</span></label>
+          <label class="flex items-center gap-2"><input type="checkbox" class="rounded" /> <span>Mock: State & Local</span></label>
+          <label class="flex items-center gap-2"><input type="checkbox" class="rounded" /> <span>Mock: Education</span></label>
+        </fieldset>
+        <div class="space-y-2">
+          <label class="block text-sm font-medium">Custom opportunity feed URL (JSON/RSS via your backend)</label>
+          <input id="customFeed" placeholder="https://your-backend.tld/api/rfps" class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" />
+          <button id="addFeedBtn" class="mt-2 text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Add Source</button>
+          <ul id="feedsList" class="mt-2 text-sm text-slate-600 dark:text-slate-300 space-y-1"></ul>
+        </div>
+        <div class="text-xs text-slate-500">Live federal, state, and local sources typically require a backend for APIs, scraping, scheduling, and CORS handling. This Clean V1 prototype focuses on UI, profile intake, mock opportunities, and matching logic.</div>
+      </div>
+    </section>
+
+    <!-- Filters -->
+    <section class="rounded-xl border border-slate-200/80 dark:border-slate-800 p-4 bg-white dark:bg-slate-900/60 shadow-sm flex flex-wrap items-center gap-3" aria-label="Filters">
+      <span class="text-sm font-medium">Quick Filters:</span>
+      <button data-filter="dueSoon" class="filter-chip px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">Due ≤ 14 days</button>
+      <button data-filter="setAside" class="filter-chip px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">Matches set‑aside</button>
+      <button data-filter="budgetFit" class="filter-chip px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">Budget fit</button>
+      <button data-filter="naicsFit" class="filter-chip px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">NAICS fit</button>
+      <button id="resetFilters" class="ml-auto px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">Reset</button>
+    </section>
+
+    <!-- Results -->
+    <section class="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-sm overflow-hidden">
+      <div class="flex items-center justify-between gap-3 p-4 border-b border-slate-200/80 dark:border-slate-800">
+        <div class="flex items-center gap-3">
+          <h2 class="text-lg font-semibold">Results</h2>
+          <span id="resultCount" class="text-sm text-slate-500">0 found</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-sm">Sort by
+            <select id="sortBy" class="ml-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-2 py-1 text-sm">
+              <option value="score">Score (desc)</option>
+              <option value="dueDate">Due Date (soonest)</option>
+              <option value="budget">Budget (high → low)</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div id="results" class="divide-y divide-slate-200/80 dark:divide-slate-800" aria-live="polite"></div>
+    </section>
+
+    <!-- Import Bid - optional -->
+    <section class="rounded-xl border border-slate-200/80 dark:border-slate-800 p-5 bg-white dark:bg-slate-900/60 shadow-sm space-y-3">
+      <h2 class="text-lg font-semibold">Quick Add a Bid</h2>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <input id="addTitle" class="rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" placeholder="Title" />
+        <input id="addDue" type="date" class="rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" />
+        <input id="addLink" class="rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" placeholder="Opportunity link" />
+      </div>
+      <textarea id="addSummary" rows="2" class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" placeholder="Short description, keywords, NAICS, budget, agency notes"></textarea>
+      <button id="addRfpBtn" class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Add</button>
+    </section>
+
+    <footer class="py-8 text-center text-sm text-slate-500">© <span id="year"></span> JudyBid™ — Client-side prototype. <span class="inline-block ml-2">JudyBid helps users understand opportunities, but users must verify final compliance and submission requirements.</span></footer>
+  </main>
+
+  <!-- Detail Modal -->
+  <div id="detailModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+    <div class="max-w-2xl w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
+      <div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
+        <h3 id="modalTitle" class="font-semibold"></h3>
+        <button id="closeModal" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close">✕</button>
+      </div>
+      <div id="modalBody" class="p-4 space-y-3 text-sm"></div>
+      <div class="p-4 flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800">
+        <a id="modalLink" href="#" target="_blank" rel="noopener" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500">Open Opportunity</a>
+        <button id="explainBtn" class="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Explain Match</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /*********************************
+     * Simple Data + Utilities       *
+     *********************************/
+    const $ = (sel, root = document) => root.querySelector(sel);
+    const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+    const now = () => new Date();
+
+    const SAMPLE_RFPS = [
+      {
+        id: crypto.randomUUID(),
+        title: "AI Chatbot for Municipal Services",
+        agency: "City of Greenfield",
+        summary: "The City seeks an AI chatbot for website and SMS to answer citizen questions, integrate with knowledge base, and triage service requests.",
+        keywords: ["AI", "chatbot", "NLP", "RAG", "civic", "knowledge base"],
+        naics: [541511, 541512],
+        location: "Greenfield, MA",
+        dueDate: addDays(now(), 12),
+        minBudget: 25000, maxBudget: 120000,
+        setAsides: ["sbe"],
+        vehicle: "Bid",
+        link: "https://example.org/rfp/greenfield-chatbot",
+        source: "Mock: State & Local"
+      },
+      {
+        id: crypto.randomUUID(),
+        title: "Computer Vision for Campus Safety",
+        agency: "Metro University",
+        summary: "Deploy computer vision to detect hazards and provide accessibility support across campus entrances.",
+        keywords: ["computer vision", "accessibility", "edge", "alerts"],
+        naics: [541512],
+        location: "Baltimore, MD",
+        dueDate: addDays(now(), 25),
+        minBudget: 80000, maxBudget: 300000,
+        setAsides: ["none"],
+        vehicle: "Bid",
+        link: "https://example.org/rfp/metrou-cv",
+        source: "Mock: Education"
+      },
+      {
+        id: crypto.randomUUID(),
+        title: "AI‑Assisted Medical Transcription (Pilot)",
+        agency: "County Health Dept.",
+        summary: "Pilot AI medical notetaker to generate SOAP notes and suggest billing codes (CPT/ICD‑10) with clinician approval.",
+        keywords: ["healthcare", "AI", "speech", "SOAP", "CPT", "ICD-10"],
+        naics: [541511, 541512],
+        location: "Fairfax, VA",
+        dueDate: addDays(now(), 8),
+        minBudget: 40000, maxBudget: 150000,
+        setAsides: ["sbe", "minority"],
+        vehicle: "RFI/RFQ",
+        link: "https://example.org/rfp/med-transcription",
+        source: "Mock: State & Local"
+      },
+      {
+        id: crypto.randomUUID(),
+        title: "Cloud Data Engineering Services (IDIQ)",
+        agency: "Federal Agency — OCIO",
+        summary: "Multiple award IDIQ for data pipelines, warehousing, and analytics; emphasis on security and compliance.",
+        keywords: ["cloud", "data engineering", "ETL", "warehousing", "security"],
+        naics: [541512],
+        location: "Washington, DC",
+        dueDate: addDays(now(), 40),
+        minBudget: 500000, maxBudget: 5000000,
+        setAsides: ["none", "8a"],
+        vehicle: "IDIQ",
+        link: "https://example.org/rfp/fed-data-idiq",
+        source: "Mock: Federal IT & Services"
+      },
+      {
+        id: crypto.randomUUID(),
+        title: "School District Website & Chat Support",
+        agency: "Riverview School District",
+        summary: "Rebuild district website with accessibility, add AI assistant for parent/student FAQs, integrate Calendly.",
+        keywords: ["web", "accessibility", "AI", "chat", "education"],
+        naics: [541511],
+        location: "Riverview, PA",
+        dueDate: addDays(now(), 16),
+        minBudget: 15000, maxBudget: 90000,
+        setAsides: ["sbe", "wosb"],
+        vehicle: "Bid",
+        link: "https://example.org/rfp/rvsd-web-chat",
+        source: "Mock: Education"
+      }
+    ];
+
+    function addDays(date, days) { const d = new Date(date); d.setDate(d.getDate() + days); return d; }
+    function fmtDate(d) { if (!d) return ""; const dt = new Date(d); return dt.toLocaleDateString(); }
+    function daysUntil(d) { const ms = new Date(d) - now(); return Math.ceil(ms / (1000*60*60*24)); }
+
+    const State = {
+      mock: true,
+      feeds: [],
+      rfps: [...SAMPLE_RFPS],
+      matches: [],
+      profile: null,
+      filters: { dueSoon: false, setAside: false, budgetFit: false, naicsFit: false },
+      sortBy: 'score'
+    };
+
+    /*********************************
+     * Basic Heuristic “AI” Matcher  *
+     *********************************/
+    const Weights = {
+      keyword: 0.45,
+      naics: 0.15,
+      setAside: 0.1,
+      location: 0.05,
+      budget: 0.15,
+      dueSoon: 0.1
+    };
+
+    function tokenize(s) {
+      return (s||"").toLowerCase().split(/[^a-z0-9\-\+]+/).filter(Boolean);
+    }
+
+    function unique(arr) { return Array.from(new Set(arr)); }
+
+    function readProfile() {
+      const form = $('#profileForm');
+      const get = n => form.elements[n]?.value?.trim?.() ?? '';
+      const getMulti = n => Array.from(form.elements[n]?.selectedOptions || []).map(o => o.value);
+      const caps = unique(tokenize(get('capabilities')));
+      return {
+        name: get('name') || 'My Business',
+        industry: get('industry'),
+        location: get('location').toLowerCase(),
+        naics: get('naics').split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n)),
+        setAside: form.elements['setAside'].value,
+        capabilities: caps,
+        minBudget: parseFloat(get('minBudget')) || 0,
+        maxBudget: parseFloat(get('maxBudget')) || Number.MAX_SAFE_INTEGER,
+        contractTypes: getMulti('contractTypes')
+      };
+    }
+
+    function scoreKeywords(profile, rfp) {
+      const rfpTokens = unique([ ...rfp.keywords.map(k=>k.toLowerCase()), ...tokenize(rfp.summary), ...tokenize(rfp.title) ]);
+      const caps = profile.capabilities;
+      if (!caps.length || !rfpTokens.length) return 0;
+      const overlap = caps.filter(c => rfpTokens.includes(c)).length;
+      return overlap / Math.max(4, caps.length); // dilute tiny profiles
+    }
+
+    function scoreNAICS(profile, rfp) {
+      if (!profile.naics.length || !rfp.naics?.length) return 0;
+      const hit = rfp.naics.some(n => profile.naics.includes(n));
+      return hit ? 1 : 0;
+    }
+
+    function scoreSetAside(profile, rfp) {
+      if (!rfp.setAsides?.length) return 0;
+      if (profile.setAside === 'none') return rfp.setAsides.includes('none') ? 0.5 : 0;
+      return rfp.setAsides.includes(profile.setAside) ? 1 : 0;
+    }
+
+    function scoreLocation(profile, rfp) {
+      if (!profile.location) return 0.2; // neutral if unspecified
+      const m = rfp.location?.toLowerCase() || '';
+      return m.includes(profile.location) ? 1 : (m.split(',')[1]?.trim() && profile.location.endsWith(m.split(',')[1].trim()) ? 0.5 : 0);
+    }
+
+    function scoreBudget(profile, rfp) {
+      const { minBudget, maxBudget } = profile;
+      if (!rfp.minBudget && !rfp.maxBudget) return 0.3; // neutral if unknown
+      const within = (!rfp.minBudget || rfp.minBudget <= maxBudget) && (!rfp.maxBudget || rfp.maxBudget >= minBudget);
+      if (!within) return 0;
+      // Reward tighter overlaps
+      const rRange = (rfp.maxBudget||rfp.minBudget||1) - (rfp.minBudget||0);
+      const pRange = (maxBudget||1) - (minBudget||0);
+      const overlapTightness = Math.max(0.2, Math.min(1, Math.min(rRange, pRange) / Math.max(rRange, pRange||1)));
+      return overlapTightness;
+    }
+
+    function scoreDueSoon(rfp) {
+      const d = daysUntil(rfp.dueDate);
+      if (isNaN(d)) return 0.3;
+      if (d <= 7) return 1;
+      if (d <= 14) return 0.7;
+      if (d <= 30) return 0.4;
+      return 0.1;
+    }
+
+    function computeScore(profile, rfp) {
+      const parts = {
+        keyword: scoreKeywords(profile, rfp),
+        naics: scoreNAICS(profile, rfp),
+        setAside: scoreSetAside(profile, rfp),
+        location: scoreLocation(profile, rfp),
+        budget: scoreBudget(profile, rfp),
+        dueSoon: scoreDueSoon(rfp)
+      };
+      let total = 0; for (const k in Weights) total += (parts[k] || 0) * Weights[k];
+      return { score: +(total * 100).toFixed(1), parts };
+    }
+
+    // Optional LLM hook (backend required). Replace with your endpoint.
+    const LLM = {
+      enabled: false,
+      async match(profile, rfp) {
+        // Example payload if you wire a server route like /api/match
+        // return fetch('/api/match', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, rfp })}).then(r=>r.json());
+        return null;
+      },
+      async explain(profile, rfp, parts) {
+        // Example: POST to /api/explain for a natural‑language rationale
+        // return fetch('/api/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, rfp, parts })}).then(r=>r.text());
+        return `JudyBid prioritizes capability keyword overlap (${(parts.keyword*100).toFixed(0)}%), NAICS alignment, budget fit, and due date proximity. Add a backend LLM for richer bid analysis, compliance checklists, and response outlines.`;
+      }
+    };
+
+    /*********************************
+     * Rendering                     *
+     *********************************/
+    function renderFeeds() {
+      const list = $('#feedsList');
+      list.innerHTML = State.feeds.map((u, i) => `<li class="flex items-center justify-between gap-2"><span class="truncate">${u}</span><button data-rm="${i}" class="text-xs text-rose-600 hover:underline">remove</button></li>`).join('');
+      list.addEventListener('click', (e) => {
+        const i = e.target.getAttribute('data-rm');
+        if (i !== null) { State.feeds.splice(+i,1); renderFeeds(); }
+      }, { once: true });
+    }
+
+    function renderResults() {
+      const resultsEl = $('#results');
+      let list = [...State.matches];
+
+      // Apply filters
+      list = list.filter(item => {
+        const { rfp, parts } = item;
+        if (State.filters.dueSoon && daysUntil(rfp.dueDate) > 14) return false;
+        if (State.filters.setAside && !(parts.setAside > 0)) return false;
+        if (State.filters.budgetFit && !(parts.budget > 0.2)) return false;
+        if (State.filters.naicsFit && !(parts.naics > 0)) return false;
+        return true;
+      });
+
+      // Sort
+      if (State.sortBy === 'score') list.sort((a,b)=>b.score - a.score);
+      else if (State.sortBy === 'dueDate') list.sort((a,b)=> new Date(a.rfp.dueDate) - new Date(b.rfp.dueDate));
+      else if (State.sortBy === 'budget') list.sort((a,b)=> (b.rfp.maxBudget||0) - (a.rfp.maxBudget||0));
+
+      $('#resultCount').textContent = `${list.length} found`;
+
+      if (!list.length) {
+        resultsEl.innerHTML = `<div class="p-6 text-sm text-slate-500">No results yet. Click <b>Fetch Latest Opportunities</b> then <b>Run JudyBid Match</b>.</div>`;
+        return;
+      }
+
+      resultsEl.innerHTML = list.map(({ rfp, score, parts }) => `
+        <article class="p-4 hover:bg-slate-50 dark:hover:bg-slate-900/40 transition">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h3 class="font-semibold leading-tight">${rfp.title}</h3>
+              <div class="text-sm text-slate-600 dark:text-slate-300">${rfp.agency} • <span>${rfp.location}</span> • <span>${rfp.vehicle}</span></div>
+            </div>
+            <div class="text-right">
+              <div class="text-2xl font-bold tabular-nums">${score.toFixed(1)}<span class="text-sm font-normal text-slate-500">/100</span></div>
+              <div class="text-xs text-slate-500">Due ${fmtDate(rfp.dueDate)} (${daysUntil(rfp.dueDate)}d)</div>
+            </div>
+          </div>
+          <p class="mt-2 text-sm">${rfp.summary}</p>
+          <div class="mt-2 flex flex-wrap gap-2 text-xs">
+            ${rfp.keywords.map(k=>`<span class="px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200/70 dark:border-slate-700">${k}</span>`).join('')}
+            ${rfp.naics.map(n=>`<span class="px-2 py-1 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800">NAICS ${n}</span>`).join('')}
+          </div>
+          <div class="mt-3 flex items-center justify-between">
+            <div class="text-xs text-slate-500">Budget: ${rfp.minBudget ? `$${rfp.minBudget.toLocaleString()}` : '—'} – ${rfp.maxBudget ? `$${rfp.maxBudget.toLocaleString()}` : '—'} • Source: ${rfp.source}</div>
+            <div class="flex items-center gap-2">
+              <button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-detail="${rfp.id}">Details</button>
+              <a class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500" href="${rfp.link}" target="_blank" rel="noopener">Open</a>
+            </div>
+          </div>
+        </article>
+      `).join('');
+
+      // Bind detail buttons
+      $$('#results [data-detail]').forEach(btn => btn.addEventListener('click', () => openDetail(btn.getAttribute('data-detail'))));
+    }
+
+    function openDetail(id) {
+      const item = State.matches.find(m => m.rfp.id === id);
+      if (!item) return;
+      const { rfp, score, parts } = item;
+      $('#modalTitle').textContent = rfp.title;
+      $('#modalBody').innerHTML = `
+        <div class="space-y-2">
+          <div><span class="font-medium">Agency:</span> ${rfp.agency}</div>
+          <div><span class="font-medium">Location:</span> ${rfp.location}</div>
+          <div><span class="font-medium">Vehicle:</span> ${rfp.vehicle}</div>
+          <div><span class="font-medium">Due:</span> ${fmtDate(rfp.dueDate)} (${daysUntil(rfp.dueDate)} days)</div>
+          <div><span class="font-medium">Budget:</span> ${rfp.minBudget ? `$${rfp.minBudget.toLocaleString()}` : '—'} – ${rfp.maxBudget ? `$${rfp.maxBudget.toLocaleString()}` : '—'}</div>
+          <div class="pt-2"><span class="font-medium">Summary:</span> ${rfp.summary}</div>
+          <div class="pt-2 grid grid-cols-2 gap-2 text-xs">
+            ${Object.entries(parts).map(([k,v])=>`<div class="p-2 rounded-lg border border-slate-200 dark:border-slate-800"><div class="text-slate-500">${k}</div><div class="font-semibold">${(v*100).toFixed(0)}%</div></div>`).join('')}
+          </div>
+        </div>`;
+      $('#modalLink').href = rfp.link;
+      $('#detailModal').classList.remove('hidden');
+      $('#explainBtn').onclick = async () => {
+        const profile = State.profile || readProfile();
+        const text = await LLM.explain(profile, rfp, parts);
+        const p = document.createElement('p');
+        p.className = 'text-sm mt-2 text-slate-700 dark:text-slate-200';
+        p.textContent = text;
+        $('#modalBody').appendChild(p);
+      };
+    }
+
+    /*********************************
+     * Actions                       *
+     *********************************/
+    async function fetchRFPs() {
+      $('#status').textContent = State.mock ? 'Loaded mock opportunities.' : 'Fetching opportunities from sources…';
+      if (State.mock) {
+        State.rfps = [...SAMPLE_RFPS];
+        persistLocal();
+        return;
+      }
+      const all = [];
+      for (const url of State.feeds) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+          const data = await res.json();
+          // Expect data to be an array of bid-like objects
+          all.push(...data);
+        } catch (e) {
+          console.warn('Feed error:', url, e);
+        }
+      }
+      State.rfps = all;
+      persistLocal();
+      $('#status').textContent = `Fetched ${all.length} opportunities from ${State.feeds.length} source(s).`;
+    }
+
+    async function runMatch() {
+      const profile = readProfile();
+      State.profile = profile;
+      const scored = [];
+      for (const rfp of State.rfps) {
+        const { score, parts } = computeScore(profile, rfp);
+        scored.push({ rfp, score, parts });
+      }
+      State.matches = scored;
+      renderResults();
+      persistLocal();
+      $('#status').textContent = `Matched ${scored.length} opportunities for \"${profile.name}\".`;
+    }
+
+    function persistLocal() {
+      const blob = { mock: State.mock, feeds: State.feeds, rfps: State.rfps, profile: State.profile };
+      localStorage.setItem('judybid-ai', JSON.stringify(blob));
+    }
+
+    function restoreLocal() {
+      try {
+        const raw = localStorage.getItem('judybid-ai'); if (!raw) return;
+        const blob = JSON.parse(raw);
+        State.mock = !!blob.mock;
+        State.feeds = blob.feeds || [];
+        State.rfps = blob.rfps?.length ? blob.rfps.map(r=>({ ...r, dueDate: r.dueDate })) : [...SAMPLE_RFPS];
+        if (blob.profile) fillProfile(blob.profile);
+        renderFeeds();
+      } catch {}
+    }
+
+    function fillProfile(p) {
+      const f = $('#profileForm');
+      f.elements['name'].value = p.name || '';
+      f.elements['industry'].value = p.industry || 'IT & Software';
+      f.elements['location'].value = p.location || '';
+      f.elements['naics'].value = (p.naics||[]).join(', ');
+      f.elements['setAside'].value = p.setAside || 'none';
+      f.elements['capabilities'].value = (p.capabilities||[]).join(', ');
+      f.elements['minBudget'].value = p.minBudget || '';
+      f.elements['maxBudget'].value = p.maxBudget && p.maxBudget !== Number.MAX_SAFE_INTEGER ? p.maxBudget : '';
+      // contractTypes
+      const opts = Array.from(f.elements['contractTypes'].options);
+      opts.forEach(o => o.selected = (p.contractTypes||[]).includes(o.value));
+    }
+
+    function exportJSON() {
+      const data = { profile: State.profile || readProfile(), matches: State.matches };
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      a.download = 'judybid_matches.json'; a.click();
+    }
+
+    function exportCSV() {
+      const rows = [['Score','Title','Agency','Location','Due','MinBudget','MaxBudget','NAICS','SetAsides','Vehicle','Source','Link']];
+      for (const { rfp, score } of State.matches) {
+        rows.push([
+          score,
+          rfp.title,
+          rfp.agency,
+          rfp.location,
+          fmtDate(rfp.dueDate),
+          rfp.minBudget || '',
+          rfp.maxBudget || '',
+          (rfp.naics||[]).join('|'),
+          (rfp.setAsides||[]).join('|'),
+          rfp.vehicle || '',
+          rfp.source || '',
+          rfp.link || ''
+        ].map(v => typeof v === 'string' ? '"'+v.replaceAll('"','""')+'"' : v).join(','));
+      }
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
+      a.download = 'judybid_matches.csv'; a.click();
+    }
+
+    /*********************************
+     * Event Wiring                  *
+     *********************************/
+    function setupEvents() {
+      $('#year').textContent = new Date().getFullYear();
+
+      // Theme
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const savedTheme = localStorage.getItem('judybid-theme');
+      if ((savedTheme === 'dark') || (!savedTheme && prefersDark)) document.documentElement.classList.add('dark');
+      $('#themeBtn').addEventListener('click', () => {
+        document.documentElement.classList.toggle('dark');
+        localStorage.setItem('judybid-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+      });
+
+      // Mock toggle
+      const mockBtn = $('#mockToggle');
+      const syncMockLabel = () => mockBtn.textContent = `Mock Data: ${State.mock ? 'On' : 'Off'}`;
+      syncMockLabel();
+      mockBtn.addEventListener('click', () => { State.mock = !State.mock; syncMockLabel(); persistLocal(); });
+
+      // Feeds
+      $('#addFeedBtn').addEventListener('click', (e) => {
+        e.preventDefault();
+        const url = $('#customFeed').value.trim(); if (!url) return;
+        State.feeds.push(url); $('#customFeed').value = ''; renderFeeds(); persistLocal();
+      });
+
+      // Profile helpers
+      $('#loadDemoProfile').addEventListener('click', () => {
+        fillProfile({
+          name: 'NOFA Business Consulting, LLC',
+          industry: 'IT & Software',
+          location: 'gaithersburg, md',
+          naics: [541511, 541512],
+          setAside: 'sbe',
+          capabilities: ['ai','chatbot','rag','computer','vision','data','engineering','web','cloud','security','accessibility'],
+          minBudget: 10000,
+          maxBudget: 250000,
+          contractTypes: ['Fixed‑Price','IDIQ']
+        });
+      });
+
+      // Fetch + Match
+      $('#fetchBtn').addEventListener('click', fetchRFPs);
+      $('#matchBtn').addEventListener('click', runMatch);
+
+      // Filters
+      $$('.filter-chip').forEach(chip => chip.addEventListener('click', () => {
+        const key = chip.dataset.filter; State.filters[key] = !State.filters[key];
+        chip.classList.toggle('bg-slate-900'); chip.classList.toggle('text-white');
+        chip.classList.toggle('dark:bg-white'); chip.classList.toggle('dark:text-slate-900');
+        renderResults();
+      }));
+      $('#resetFilters').addEventListener('click', () => {
+        State.filters = { dueSoon: false, setAside: false, budgetFit: false, naicsFit: false };
+        $$('.filter-chip').forEach(c => c.classList.remove('bg-slate-900','text-white','dark:bg-white','dark:text-slate-900'));
+        renderResults();
+      });
+
+      // Sorting
+      $('#sortBy').addEventListener('change', (e) => { State.sortBy = e.target.value; renderResults(); });
+
+      // Clear
+      $('#clearBtn').addEventListener('click', () => {
+        State.matches = []; State.rfps = []; renderResults();
+        $('#status').textContent = 'Cleared.';
+      });
+
+      // Export
+      $('#exportBtn').addEventListener('click', () => {
+        // Offer both formats
+        const menu = document.createElement('div');
+        menu.className = 'fixed inset-0 bg-black/30 flex items-center justify-center';
+        menu.innerHTML = `
+          <div class="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 space-y-3">
+            <div class="font-medium">Export JudyBid matches</div>
+            <div class="flex items-center gap-2">
+              <button id="xjson" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900">JSON</button>
+              <button id="xcsv" class="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700">CSV</button>
+              <button id="xclose" class="ml-4 text-sm px-3 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">Cancel</button>
+            </div>
+          </div>`;
+        document.body.appendChild(menu);
+        menu.querySelector('#xjson').onclick = ()=>{ exportJSON(); menu.remove(); };
+        menu.querySelector('#xcsv').onclick = ()=>{ exportCSV(); menu.remove(); };
+        menu.querySelector('#xclose').onclick = ()=> menu.remove();
+      });
+
+      // Modal
+      $('#closeModal').addEventListener('click', ()=> $('#detailModal').classList.add('hidden'));
+      $('#detailModal').addEventListener('click', (e)=>{ if (e.target === $('#detailModal')) $('#detailModal').classList.add('hidden'); });
+
+      // Quick Add Bid
+      $('#addRfpBtn').addEventListener('click', () => {
+        const title = $('#addTitle').value.trim(); if (!title) return;
+        const due = $('#addDue').value ? new Date($('#addDue').value) : addDays(now(), 21);
+        const link = $('#addLink').value.trim() || '#';
+        const summary = $('#addSummary').value.trim();
+        const kw = unique(tokenize(summary)).slice(0, 8);
+        const naics = (summary.match(/\b(\d{6})\b/g) || []).map(n=>parseInt(n,10));
+        const budget = (summary.match(/\$([\d,]+)/g) || []).map(s=>parseInt(s.replace(/[$,]/g,''),10));
+        State.rfps.push({ id: crypto.randomUUID(), title, agency: 'Custom', summary, keywords: kw, naics, location: '', dueDate: due, minBudget: budget[0]||0, maxBudget: budget[1]||budget[0]||0, setAsides: ['none'], vehicle: 'Bid', link, source: 'Manual' });
+        $('#addTitle').value = ''; $('#addDue').value = ''; $('#addLink').value = ''; $('#addSummary').value = '';
+        $('#status').textContent = 'Added 1 opportunity.';
+        persistLocal();
+      });
+    }
+
+    // Boot
+    restoreLocal();
+    setupEvents();
+    // First render
+    State.profile = readProfile();
+    renderResults();
+  </script>
+
+  <noscript>
+    <div class="no-tailwind-fallback">
+      <h1>JudyBid™</h1>
+      <p>This prototype requires JavaScript.</p>
+    </div>
+  </noscript>
+</body>
+</html>
