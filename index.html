@@ -64,7 +64,10 @@
             <h2 class="text-lg font-semibold">Business Profile</h2>
             <p class="text-sm text-slate-500">Tell us about your business to find the best-fit opportunities.</p>
           </div>
-          <button type="button" id="loadExampleProfile" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500">Load Example Profile</button>
+          <div class="flex gap-2 flex-shrink-0">
+            <button type="button" id="resetProfileBtn" class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-500 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-600 dark:hover:bg-rose-950/30 dark:hover:text-rose-400 transition-colors">Reset Profile</button>
+            <button type="button" id="loadExampleProfile" class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500">Load Example Profile</button>
+          </div>
         </div>
 
         <div class="grid sm:grid-cols-2 gap-4">
@@ -763,6 +766,14 @@
         e.preventDefault();
         const url = $('#customFeed').value.trim(); if (!url) return;
         State.feeds.push(url); $('#customFeed').value = ''; renderFeeds(); persistLocal();
+      });
+
+      // Reset profile
+      $('#resetProfileBtn').addEventListener('click', () => {
+        $('#profileForm').reset();
+        State.profile = null;
+        persistLocal();
+        $('#status').textContent = 'Profile cleared.';
       });
 
       // Profile helpers
