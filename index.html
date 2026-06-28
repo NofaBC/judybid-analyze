@@ -164,6 +164,7 @@
             <!-- File content extraction is a future enhancement; filename is stored as a readiness signal -->
             <input type="file" id="capStatementFile" accept=".pdf,.docx,.doc,.txt" class="mt-1 block text-sm text-slate-600 dark:text-slate-300 w-full cursor-pointer" />
             <p id="capFileLabel" class="text-xs text-slate-400 mt-1 hidden"></p>
+            <p class="text-xs text-slate-400 mt-1">Clean V1 uses pasted capability statement text for matching. Uploaded PDF parsing is coming soon.</p>
           </label>
         </div>
 
@@ -896,7 +897,7 @@
       if (!signals.hasCapStatement && !signals.capFileName) {
         concerns.push(`Adding a capability statement may improve match quality.`);
       } else if (!signals.hasCapStatement && signals.capFileName) {
-        concerns.push(`File attached. For stronger matching, paste the text of your capability statement. File-content parsing is coming soon.`);
+        concerns.push(`Uploaded file detected, but Clean V1 uses pasted text for matching. Paste capability statement text for stronger match quality.`);
       }
 
       // Review guidance
