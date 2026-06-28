@@ -11,6 +11,10 @@
     // Tailwind config: enable dark mode via class
     tailwind.config = { darkMode: 'class' };
   </script>
+  <!-- Firebase SDKs (compat v10) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <style>
     /* Fallback styles if Tailwind CDN is blocked */
     .tw-hidden-if-no-tailwind { display: none; }
@@ -27,6 +31,13 @@
       </div>
       <div class="flex items-center gap-2">
         <button id="exampleToggle" class="px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 text-sm" aria-pressed="true" title="Toggle example opportunities">Example Opportunities: On</button>
+        <!-- Auth area -->
+        <button id="signInBtn" class="px-3 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-sm">Sign In</button>
+        <div id="userArea" class="hidden items-center gap-2">
+          <span id="userEmail" class="hidden sm:inline-block text-xs text-slate-500 max-w-[110px] truncate"></span>
+          <button id="subscribeBtn" class="hidden px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 text-sm font-medium">Subscribe</button>
+          <button id="signOutBtn" class="px-3 py-1.5 rounded-lg border border-slate-300/60 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 text-sm">Sign Out</button>
+        </div>
         <button id="exportBtn" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 text-sm">Export</button>
         <button id="clearBtn" class="px-3 py-1.5 rounded-lg border border-slate-300/60 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800 text-sm">Clear</button>
         <button id="themeBtn" class="p-2 rounded-lg border border-slate-300/60 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800" title="Toggle dark mode" aria-label="Toggle theme">
@@ -271,6 +282,38 @@
     <footer class="py-8 text-center text-sm text-slate-500">© <span id="year"></span> NOFA AI Factory — JudyBid Analyze™. JudyBid advises; the user decides.</footer>
   </main>
 
+  <!-- Auth Modal -->
+  <div id="authModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 p-4 z-50" role="dialog" aria-modal="true">
+    <div class="max-w-sm w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
+      <div class="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
+        <h3 class="font-semibold">Sign in to JudyBid Analyze™</h3>
+        <button id="closeAuthModal" class="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close">✕</button>
+      </div>
+      <div class="flex border-b border-slate-200 dark:border-slate-800">
+        <button data-tab="login" class="auth-tab flex-1 px-4 py-2.5 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600">Sign In</button>
+        <button data-tab="signup" class="auth-tab flex-1 px-4 py-2.5 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-slate-100">Create Account</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <button id="googleSignIn" class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm">
+          <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Continue with Google
+        </button>
+        <div class="flex items-center gap-3"><hr class="flex-1 border-slate-200 dark:border-slate-700"/><span class="text-xs text-slate-400">or</span><hr class="flex-1 border-slate-200 dark:border-slate-700"/></div>
+        <label class="block">
+          <span class="text-sm font-medium">Email</span>
+          <input id="authEmail" type="email" autocomplete="email" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-sm" placeholder="you@example.com" />
+        </label>
+        <label class="block">
+          <span class="text-sm font-medium">Password</span>
+          <input id="authPassword" type="password" autocomplete="current-password" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-sm" placeholder="••••••••" />
+        </label>
+        <p id="authError" class="text-sm text-rose-600 hidden"></p>
+        <button id="authSubmit" data-mode="login" class="w-full px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 text-sm font-medium">Sign In</button>
+        <p id="authForgot" class="text-center text-xs text-slate-500"><button id="forgotPasswordBtn" class="underline hover:text-slate-700 dark:hover:text-slate-300">Forgot password?</button></p>
+      </div>
+    </div>
+  </div>
+
   <!-- Detail Modal -->
   <div id="detailModal" class="fixed inset-0 hidden items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
     <div class="max-w-2xl w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl">
@@ -287,6 +330,168 @@
   </div>
 
   <script>
+    /*********************************
+     * Firebase Auth + Firestore     *
+     *********************************/
+    // Replace every REPLACE_WITH_YOUR_* value with your Firebase web app config.
+    // Get it from: console.firebase.google.com → Project settings → Your apps → Web app.
+    // Firestore security rules: allow read, write: if request.auth.uid == userId;
+    const FIREBASE_CONFIG = {
+      apiKey:            'REPLACE_WITH_YOUR_API_KEY',
+      authDomain:        'REPLACE_WITH_YOUR_PROJECT_ID.firebaseapp.com',
+      projectId:         'REPLACE_WITH_YOUR_PROJECT_ID',
+      storageBucket:     'REPLACE_WITH_YOUR_PROJECT_ID.appspot.com',
+      messagingSenderId: 'REPLACE_WITH_YOUR_MESSAGING_SENDER_ID',
+      appId:             'REPLACE_WITH_YOUR_APP_ID',
+    };
+
+    let fbAuth = null, fbDb = null, currentUser = null;
+    let userSub = { status: 'free', monthlyMatchRunCount: 0, matchRunLimit: 10,
+                    currentBillingPeriodStart: null, currentBillingPeriodEnd: null };
+
+    // Firestore path helpers
+    const fbUserRef = uid => fbDb.collection('users').doc(uid);
+    const fbRunsRef = uid => fbDb.collection('users').doc(uid).collection('matchRuns');
+    const fbOppsRef = uid => fbDb.collection('users').doc(uid).collection('savedOpps');
+
+    function fbConfigured() {
+      return typeof firebase !== 'undefined' &&
+             FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.startsWith('REPLACE');
+    }
+
+    function initFirebase() {
+      if (!fbConfigured()) { console.info('Firebase not configured — running in guest mode.'); return; }
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+        fbAuth = firebase.auth();
+        fbDb   = firebase.firestore();
+        fbAuth.onAuthStateChanged(handleAuthChange);
+      } catch (e) { console.warn('Firebase init error:', e.message); }
+    }
+
+    async function handleAuthChange(user) {
+      currentUser = user;
+      syncAuthUI(user);
+      if (user) {
+        await ensureUserDoc(user.uid);
+        await loadProfileFromFirestore(user.uid);
+      }
+    }
+
+    function syncAuthUI(user) {
+      const signInBtn = $('#signInBtn'), userArea = $('#userArea');
+      const emailEl = $('#userEmail'), subBtn = $('#subscribeBtn');
+      if (user) {
+        signInBtn?.classList.add('hidden');
+        userArea?.classList.remove('hidden'); userArea?.classList.add('flex');
+        if (emailEl) emailEl.textContent = user.email || user.displayName || 'Signed in';
+        if (subBtn) subBtn.classList.toggle('hidden', userSub.status === 'active');
+      } else {
+        signInBtn?.classList.remove('hidden');
+        userArea?.classList.add('hidden'); userArea?.classList.remove('flex');
+        subBtn?.classList.add('hidden');
+      }
+    }
+
+    async function ensureUserDoc(uid) {
+      if (!fbDb) return;
+      try {
+        const snap = await fbUserRef(uid).get();
+        if (!snap.exists || !snap.data().subscription) {
+          const now = new Date();
+          const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+          const defSub = {
+            status: 'free', stripeCustomerId: null, planId: null,
+            monthlyMatchRunCount: 0, matchRunLimit: 10,
+            currentBillingPeriodStart: now.toISOString(),
+            currentBillingPeriodEnd: end.toISOString(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          };
+          await fbUserRef(uid).set({ subscription: defSub }, { merge: true });
+          userSub = defSub;
+        } else {
+          userSub = snap.data().subscription || userSub;
+        }
+        syncAuthUI(currentUser);
+      } catch (e) { console.warn('ensureUserDoc:', e); }
+    }
+
+    async function loadProfileFromFirestore(uid) {
+      if (!fbDb) return;
+      try {
+        const snap = await fbUserRef(uid).get();
+        const p = snap.data()?.profile;
+        if (p) {
+          fillProfile(p);
+          State.profile = readProfile();
+          $('#status').textContent = `Signed in as ${currentUser.email || 'your account'}.`;
+        }
+      } catch (e) { console.warn('loadProfile:', e); }
+    }
+
+    async function saveProfileToFirestore() {
+      if (!fbDb || !currentUser) return;
+      try {
+        const p = readProfile();
+        await fbUserRef(currentUser.uid).set({
+          profile: { ...p, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+        }, { merge: true });
+      } catch (e) { console.warn('saveProfile:', e); }
+    }
+
+    async function saveMatchRunToFirestore(ranked) {
+      if (!fbDb || !currentUser || !ranked.length) return;
+      try {
+        const profile = State.profile || readProfile();
+        const fit = {
+          strongFit:   ranked.filter(r => r.fitLabel === 'Strong fit').length,
+          possibleFit: ranked.filter(r => r.fitLabel === 'Possible fit').length,
+          weakFit:     ranked.filter(r => r.fitLabel === 'Weak fit').length,
+          needsReview: ranked.filter(r => r.fitLabel === 'Needs review').length,
+        };
+        await fbRunsRef(currentUser.uid).add({
+          timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+          profileSnapshot: { name: profile.name, industry: profile.industry, naics: profile.naics || [] },
+          resultsCount: ranked.length, fitBreakdown: fit,
+        });
+        const nextCount = (userSub.monthlyMatchRunCount || 0) + 1;
+        await fbUserRef(currentUser.uid).set({
+          subscription: { ...userSub, monthlyMatchRunCount: nextCount,
+                          updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+        }, { merge: true });
+        userSub.monthlyMatchRunCount = nextCount;
+      } catch (e) { console.warn('saveMatchRun:', e); }
+    }
+
+    async function saveOpportunityToFirestore(rfp) {
+      if (!currentUser) { showAuthModal(); return; }
+      if (!fbDb) return;
+      try {
+        const doc = { ...rfp, savedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        if (doc.dueDate instanceof Date) doc.dueDate = doc.dueDate.toISOString();
+        await fbOppsRef(currentUser.uid).doc(rfp.id).set(doc);
+        $('#status').textContent = 'Opportunity saved to your account.';
+      } catch (e) { console.warn('saveOpp:', e); }
+    }
+
+    // Auth action helpers
+    async function fbSignInEmail(e, p) { return fbAuth.signInWithEmailAndPassword(e, p); }
+    async function fbSignUpEmail(e, p) { return fbAuth.createUserWithEmailAndPassword(e, p); }
+    async function fbSignInGoogle()    { return fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+    async function fbSignOut()         { return fbAuth?.signOut(); }
+    async function fbResetPw(email)    { return fbAuth.sendPasswordResetEmail(email); }
+
+    function showAuthModal() {
+      const m = $('#authModal');
+      m.classList.remove('hidden'); m.classList.add('flex');
+      setTimeout(() => $('#authEmail')?.focus(), 80);
+    }
+    function hideAuthModal() {
+      $('#authModal').classList.add('hidden'); $('#authModal').classList.remove('flex');
+      const err = $('#authError');
+      if (err) { err.classList.add('hidden'); err.textContent = ''; }
+    }
+
     /*********************************
      * Simple Data + Utilities       *
      *********************************/
@@ -526,6 +731,19 @@
         ...stateAbbrs.filter(s => new RegExp('\\b' + s + '\\b').test(capLow))
       ]);
 
+      // Parse multi-value service areas from the profile location field.
+      // Supports formats like "Gaithersburg, MD; Maryland, DC, Virginia; remote U.S. delivery"
+      const remoteCapable = /\bremote\b/i.test(profile.location);
+      const ST = { al:'alabama',ak:'alaska',az:'arizona',ar:'arkansas',ca:'california',co:'colorado',ct:'connecticut',de:'delaware',fl:'florida',ga:'georgia',hi:'hawaii',id:'idaho',il:'illinois',in:'indiana',ia:'iowa',ks:'kansas',ky:'kentucky',la:'louisiana',me:'maine',md:'maryland',ma:'massachusetts',mi:'michigan',mn:'minnesota',ms:'mississippi',mo:'missouri',mt:'montana',ne:'nebraska',nv:'nevada',nh:'new hampshire',nj:'new jersey',nm:'new mexico',ny:'new york',nc:'north carolina',nd:'north dakota',oh:'ohio',ok:'oklahoma',or:'oregon',pa:'pennsylvania',ri:'rhode island',sc:'south carolina',sd:'south dakota',tn:'tennessee',tx:'texas',ut:'utah',vt:'vermont',va:'virginia',wa:'washington',wv:'west virginia',wi:'wisconsin',wy:'wyoming',dc:'district of columbia' };
+      const locLow = profile.location.toLowerCase();
+      const servedSet = new Set();
+      Object.entries(ST).forEach(([abbr, name]) => {
+        if (new RegExp('\\b' + abbr + '\\b').test(locLow) || locLow.includes(name)) {
+          servedSet.add(abbr); servedSet.add(name);
+        }
+      });
+      const servedLocations = [...servedSet];
+
       return {
         name: profile.name,
         industry: profile.industry,
@@ -540,6 +758,8 @@
         profileKeywords: profile.capabilities,
         capKeywords: capTokens,
         capLocations,
+        servedLocations,
+        remoteCapable,
         hasCapStatement: capText.length > 30,
         capFileName: capInput.fileName,
       };
@@ -587,17 +807,25 @@
         setAsideScore = signals.inferredSetAsides.some(s => opp.setAsides.includes(s)) ? 1 : 0;
       }
 
-      // Location fit
+      // Location fit — matches any served state/city from the multi-value profile location field
       let locationScore = 0.2;
-      if (signals.location) {
-        const oppLoc = (opp.location || '').toLowerCase();
-        if (oppLoc.includes(signals.location)) {
-          locationScore = 1;
-        } else {
-          const profileState = signals.location.split(',')[1]?.trim() || signals.location.trim();
-          if (profileState && oppLoc.includes(profileState)) locationScore = 0.6;
-          else if (signals.capLocations.some(loc => oppLoc.includes(loc))) locationScore = 0.4;
-          else locationScore = 0.1;
+      const oppLoc = (opp.location || '').toLowerCase();
+      if (signals.servedLocations?.length) {
+        const locMatch = signals.servedLocations.some(token =>
+          token.length === 2
+            ? new RegExp('\\b' + token + '\\b').test(oppLoc)
+            : oppLoc.includes(token)
+        );
+        if (locMatch)                   locationScore = 0.9;
+        else if (signals.remoteCapable) locationScore = 0.5; // remote delivery reduces location concern
+        else                            locationScore = 0.1;
+      } else if (signals.location) {
+        if (oppLoc.includes(signals.location))   locationScore = 1;
+        else {
+          const st = signals.location.split(',')[1]?.trim() || signals.location.trim();
+          if (st && oppLoc.includes(st))                                        locationScore = 0.6;
+          else if (signals.capLocations?.some(loc => oppLoc.includes(loc)))    locationScore = 0.4;
+          else                                                                   locationScore = signals.remoteCapable ? 0.5 : 0.1;
         }
       }
 
@@ -665,7 +893,11 @@
         concerns.push(`Budget range ($${(opp.minBudget||0).toLocaleString()}–$${(opp.maxBudget||0).toLocaleString()}) may fall outside your stated range.`);
       }
       if (parts.location < 0.3 && opp.location) concerns.push(`Location (${opp.location}) may be outside your primary service area — confirm whether remote or on-site work applies.`);
-      if (!signals.hasCapStatement) concerns.push(`Adding a capability statement may improve match quality.`);
+      if (!signals.hasCapStatement && !signals.capFileName) {
+        concerns.push(`Adding a capability statement may improve match quality.`);
+      } else if (!signals.hasCapStatement && signals.capFileName) {
+        concerns.push(`File attached. For stronger matching, paste the text of your capability statement. File-content parsing is coming soon.`);
+      }
 
       // Review guidance
       const review = `Review the full solicitation for eligibility requirements, addenda, certifications, and submission instructions. JudyBid advises; the user decides.`;
@@ -708,10 +940,10 @@
         .map(opp => {
           const scoreData = scoreOpportunityAgainstProfile(opp, signals);
           const explanation = explainMatch(opp, signals, scoreData);
-          const fitLabel = scoreData.score >= 75 ? 'Strong fit'
-            : scoreData.score >= 55 ? 'Possible fit'
-            : scoreData.score >= 35 ? 'Weak fit'
-            : 'Needs review';
+          const fitLabel = scoreData.score >= 70 ? 'Strong fit'
+            : scoreData.score >= 45 ? 'Possible fit'
+            : scoreData.score >= 25 ? 'Needs review'
+            : 'Weak fit';
           return { rfp: opp, score: scoreData.score, parts: scoreData.parts, fitLabel, explanation };
         })
         .sort((a, b) => b.score - a.score);
@@ -785,6 +1017,7 @@
           <div class="mt-3 flex items-center justify-between">
             <div class="text-xs text-slate-500">Budget: ${rfp.minBudget ? `$${rfp.minBudget.toLocaleString()}` : '\u2014'} \u2013 ${rfp.maxBudget ? `$${rfp.maxBudget.toLocaleString()}` : '\u2014'} \u2022 Source: ${rfp.source}</div>
             <div class="flex items-center gap-2">
+              <button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-save="${rfp.id}">Save</button>
               <button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-detail="${rfp.id}">Details</button>
               <a class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500" href="${rfp.link}" target="_blank" rel="noopener">Open</a>
             </div>
@@ -794,6 +1027,10 @@
       `).join('');
 
       $$('#results [data-detail]').forEach(btn => btn.addEventListener('click', () => openDetail(btn.getAttribute('data-detail'))));
+      $$('#results [data-save]').forEach(btn => btn.addEventListener('click', () => {
+        const item = State.matches.find(m => m.rfp.id === btn.getAttribute('data-save'));
+        if (item) saveOpportunityToFirestore(item.rfp);
+      }));
     }
 
     /**
@@ -817,6 +1054,7 @@
       const ranked = rankOpportunities(pool, signals, overrides);
       State.matches = ranked;
       persistLocal();
+      saveMatchRunToFirestore(ranked); // Firestore: persists run summary + increments usage counter
       renderMatchResults(ranked);
 
       const strong   = ranked.filter(r => r.fitLabel === 'Strong fit').length;
@@ -1096,6 +1334,61 @@
     function setupEvents() {
       $('#year').textContent = new Date().getFullYear();
 
+      // Firebase Auth UI events
+      $('#signInBtn')?.addEventListener('click', showAuthModal);
+      $('#closeAuthModal')?.addEventListener('click', hideAuthModal);
+      $('#authModal')?.addEventListener('click', e => { if (e.target === $('#authModal')) hideAuthModal(); });
+
+      $$('.auth-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          const mode = tab.dataset.tab;
+          $$('.auth-tab').forEach(t => {
+            t.classList.toggle('border-indigo-600',  t.dataset.tab === mode);
+            t.classList.toggle('text-indigo-600',    t.dataset.tab === mode);
+            t.classList.toggle('border-transparent', t.dataset.tab !== mode);
+            t.classList.toggle('text-slate-500',     t.dataset.tab !== mode);
+          });
+          const s = $('#authSubmit');
+          if (s) { s.textContent = mode === 'login' ? 'Sign In' : 'Create Account'; s.dataset.mode = mode; }
+          $('#authForgot')?.classList.toggle('hidden', mode !== 'login');
+        });
+      });
+
+      $('#authSubmit')?.addEventListener('click', async () => {
+        const email = ($('#authEmail')?.value || '').trim();
+        const pw    = ($('#authPassword')?.value || '');
+        const mode  = $('#authSubmit')?.dataset.mode || 'login';
+        const err   = $('#authError');
+        if (err) { err.classList.add('hidden'); err.className = err.className.replace('text-emerald-600', 'text-rose-600'); }
+        try {
+          if (mode === 'login') await fbSignInEmail(email, pw);
+          else                  await fbSignUpEmail(email, pw);
+          hideAuthModal();
+        } catch (e) { if (err) { err.textContent = e.message; err.classList.remove('hidden'); } }
+      });
+
+      $('#googleSignIn')?.addEventListener('click', async () => {
+        try { await fbSignInGoogle(); hideAuthModal(); }
+        catch (e) { const err=$('#authError'); if(err){err.textContent=e.message;err.classList.remove('hidden');} }
+      });
+
+      $('#forgotPasswordBtn')?.addEventListener('click', async () => {
+        const email = ($('#authEmail')?.value || '').trim();
+        const err = $('#authError');
+        if (!email) { if(err){err.textContent='Enter your email first.';err.classList.remove('hidden');} return; }
+        try {
+          await fbResetPw(email);
+          if (err) { err.textContent='Password reset sent — check your inbox.'; err.classList.remove('hidden','text-rose-600'); err.classList.add('text-emerald-600'); }
+        } catch (e) { if(err){err.textContent=e.message;err.classList.remove('hidden');} }
+      });
+
+      $('#signOutBtn')?.addEventListener('click', () => fbSignOut());
+
+      // Profile auto-save to Firestore on blur when signed in
+      $$('#profileForm input, #profileForm select, #profileForm textarea').forEach(el => {
+        el.addEventListener('blur', () => { if (currentUser) saveProfileToFirestore(); });
+      });
+
       // Theme
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       const savedTheme = localStorage.getItem('judybid-theme');
@@ -1224,6 +1517,7 @@
     // Boot
     restoreLocal();
     setupEvents();
+    initFirebase(); // Firebase: init after DOM is ready; onAuthStateChanged handles profile load
     // First render
     State.profile = readProfile();
     renderResults();
