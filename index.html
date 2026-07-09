@@ -107,17 +107,36 @@
           <label class="block">
             <span class="text-sm font-medium">NAICS (comma‑separated)</span>
             <input name="naics" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2" placeholder="541511, 541512" />
+            <p class="text-xs text-slate-400 mt-1">Used in federal solicitations and award data.</p>
           </label>
           <label class="block">
             <span class="text-sm font-medium">Set‑Aside Eligibility</span>
-            <select name="setAside" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2">
-              <option value="none">None</option>
+            <select name="setAside" multiple class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2">
               <option value="sbe">Small Business</option>
-              <option value="wosb">Women‑Owned (WOSB)</option>
-              <option value="veteran">Veteran‑Owned</option>
-              <option value="minority">Minority‑Owned</option>
+              <option value="minority">Minority‑Owned Business</option>
+              <option value="wosb">Woman‑Owned Small Business (WOSB)</option>
+              <option value="veteran">Veteran‑Owned Small Business</option>
+              <option value="sdvosb">Service‑Disabled Veteran‑Owned (SDVOSB)</option>
               <option value="8a">SBA 8(a)</option>
+              <option value="hubzone">HUBZone</option>
+              <option value="dbe">Disadvantaged Business Enterprise (DBE)</option>
+              <option value="none">None / Not Sure</option>
+              <option value="other">Other / Custom</option>
             </select>
+            <p class="text-xs text-slate-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
+          </label>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <label class="block">
+            <span class="text-sm font-medium">PSC / FSC Codes <span class="text-xs font-normal text-slate-400">(comma‑separated)</span></span>
+            <input name="pscFsc" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-sm" placeholder="R408, D301" />
+            <p class="text-xs text-slate-400 mt-1">Used in federal procurement solicitations.</p>
+          </label>
+          <label class="block">
+            <span class="text-sm font-medium">NIGP Codes <span class="text-xs font-normal text-slate-400">(comma‑separated)</span></span>
+            <input name="nigp" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2 text-sm" placeholder="92012, 20620" />
+            <p class="text-xs text-slate-400 mt-1">Used by state, local, and BidNet-style platforms.</p>
           </label>
         </div>
 
@@ -138,11 +157,21 @@
             <label class="block col-span-2">
               <span class="text-sm font-medium">Contract Types</span>
               <select name="contractTypes" multiple class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-2">
-                <option>Fixed‑Price</option>
-                <option>Time & Materials</option>
+                <option>RFP</option>
+                <option>RFQ</option>
+                <option>RFI</option>
+                <option>IFB</option>
+                <option>Bid</option>
+                <option>Sources Sought</option>
+                <option>Pre‑Solicitation</option>
+                <option>Special Notice</option>
+                <option>Industry Day</option>
+                <option>Grant</option>
                 <option>IDIQ</option>
                 <option>BPA</option>
-                <option>Grant</option>
+                <option>Fixed‑Price</option>
+                <option>Time & Materials</option>
+                <option>Other</option>
               </select>
               <p class="text-xs text-slate-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
             </label>
@@ -180,6 +209,17 @@
       <!-- Opportunity Search -->
       <div class="rounded-xl border border-slate-200/80 dark:border-slate-800 p-5 bg-white dark:bg-slate-900/60 shadow-sm space-y-3">
         <h2 class="text-lg font-semibold">Opportunity Search</h2>
+
+        <!-- Opportunity Type / Category Filter -->
+        <label class="block">
+          <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Opportunity Type</span>
+          <select id="categoryFilter" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-1.5 text-sm">
+            <option value="all">All Opportunities</option>
+            <option value="market-research">Market Research (RFI, Sources Sought, Pre‑Solicitation…)</option>
+            <option value="solicitations">Solicitations (RFP, IFB, RFQ, Bid…)</option>
+            <option value="grants">Grants (Grant, NOFO, Notice of Funding…)</option>
+          </select>
+        </label>
 
         <!-- Primary action -->
         <button id="searchBtn" class="w-full px-4 py-2.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 text-sm font-medium">Find Opportunities Using My Business Profile</button>
@@ -242,7 +282,8 @@
     <section class="rounded-xl border border-slate-200/80 dark:border-slate-800 p-4 bg-white dark:bg-slate-900/60 shadow-sm flex flex-wrap items-center gap-3" aria-label="Filters">
       <span class="text-sm font-medium">Quick Filters:</span>
       <button data-filter="dueSoon" class="filter-chip px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">Due ≤ 14 days</button>
-      <button data-filter="setAside" class="filter-chip px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">Matches set‑aside</button>
+      <button data-filter="setAside" class="filter-chip px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">Set-aside match</button>
+      <button data-filter="contractFit" class="filter-chip px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">Contract type match</button>
       <button data-filter="budgetFit" class="filter-chip px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">Budget fit</button>
       <button data-filter="naicsFit" class="filter-chip px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">NAICS fit</button>
       <button id="resetFilters" class="ml-auto px-3 py-1.5 rounded-full border border-slate-300 dark:border-slate-700 text-sm">Reset</button>
@@ -588,7 +629,7 @@
       rfps: [...SAMPLE_RFPS],
       matches: [],
       profile: null,
-      filters: { dueSoon: false, setAside: false, budgetFit: false, naicsFit: false },
+      filters: { dueSoon: false, setAside: false, budgetFit: false, naicsFit: false, contractFit: false },
       sortBy: 'score'
     };
 
@@ -620,7 +661,9 @@
         industry: get('industry'),
         location: get('location').toLowerCase(),
         naics: get('naics').split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n)),
-        setAside: form.elements['setAside'].value,
+        setAsides: getMulti('setAside'),
+        pscFsc: get('pscFsc').split(',').map(s=>s.trim()).filter(Boolean),
+        nigp: get('nigp').split(',').map(s=>s.trim()).filter(Boolean),
         capStatement: get('capStatement'),
         capabilities: caps,
         minBudget: parseFloat(get('minBudget')) || 0,
@@ -645,8 +688,12 @@
 
     function scoreSetAside(profile, rfp) {
       if (!rfp.setAsides?.length) return 0;
-      if (profile.setAside === 'none') return rfp.setAsides.includes('none') ? 0.5 : 0;
-      return rfp.setAsides.includes(profile.setAside) ? 1 : 0;
+      // Handle both old string and new array format
+      const profileSets = Array.isArray(profile.setAsides) ? profile.setAsides
+        : (profile.setAside ? [profile.setAside] : []);
+      const active = profileSets.filter(s => s !== 'none' && s !== 'other');
+      if (!active.length) return rfp.setAsides.includes('none') ? 0.5 : 0;
+      return rfp.setAsides.some(s => active.includes(s)) ? 1 : 0;
     }
 
     function scoreLocation(profile, rfp) {
@@ -750,8 +797,22 @@
         industry: profile.industry,
         location: profile.location,
         naics: unique([...profile.naics, ...capNaics]),
-        setAside: profile.setAside,
-        inferredSetAsides: unique([profile.setAside !== 'none' ? profile.setAside : null, ...inferredSetAsides].filter(Boolean)),
+        // Handle both old string and new array format
+        setAsides: (() => {
+          const arr = Array.isArray(profile.setAsides) ? profile.setAsides
+            : (profile.setAside ? [profile.setAside] : []);
+          return arr.filter(s => s !== 'none' && s !== 'other');
+        })(),
+        setAside: (() => {
+          const arr = Array.isArray(profile.setAsides) ? profile.setAsides
+            : (profile.setAside ? [profile.setAside] : []);
+          return arr.find(s => s !== 'none' && s !== 'other') || 'none';
+        })(),
+        inferredSetAsides: unique([
+          ...(Array.isArray(profile.setAsides) ? profile.setAsides
+            : [profile.setAside]).filter(s => s && s !== 'none' && s !== 'other'),
+          ...inferredSetAsides
+        ]),
         contractTypes: profile.contractTypes || [],
         minBudget: profile.minBudget,
         maxBudget: profile.maxBudget,
@@ -876,7 +937,12 @@
       if (matchedKeywords.length) positives.push(`capability keywords (${matchedKeywords.slice(0, 4).join(', ')})`);
       if (matchedNaics.length) positives.push(`NAICS ${matchedNaics.join(', ')}`);
       if (parts.location > 0.5) positives.push(`${opp.location} service area`);
-      if (parts.setAside >= 0.8) positives.push(signals.setAside.toUpperCase() + ' eligibility');
+      if (parts.setAside >= 0.8 && (signals.setAsides?.length || signals.setAside !== 'none')) {
+        const SA_LABELS = { sbe:'SBE', minority:'Minority\u2011Owned', wosb:'WOSB', veteran:'Veteran\u2011Owned', sdvosb:'SDVOSB', '8a':'SBA 8(a)', hubzone:'HUBZone', dbe:'DBE' };
+        const labels = (signals.setAsides?.length ? signals.setAsides : [signals.setAside])
+          .map(s => SA_LABELS[s] || s.toUpperCase()).join(', ');
+        positives.push(`${labels} eligibility`);
+      }
       if (parts.budget > 0.4 && (opp.minBudget || opp.maxBudget)) positives.push(`budget range`);
       const relevant = positives.length
         ? `JudyBid found matching signals in your ${positives.join(', ')}.`
@@ -923,8 +989,19 @@
      * Future: pool can be swapped for API-sourced or imported opportunities.
      */
     function rankOpportunities(pool, signals, overrides = {}) {
+      const MARKET_RESEARCH = ['rfi', 'sources sought', 'pre-solicitation', 'special notice', 'sole source', 'industry day'];
+      const SOLICITATIONS   = ['rfp', 'ifb', 'rfq', 'bid', 'combined synopsis', 'rfa'];
+      const GRANTS          = ['grant', 'nofo', 'notice of funding'];
+
       return pool
         .filter(opp => {
+          // Opportunity type / category pre-filter
+          if (overrides.category && overrides.category !== 'all') {
+            const veh = (opp.vehicle || '').toLowerCase();
+            if (overrides.category === 'market-research' && !MARKET_RESEARCH.some(v => veh.includes(v))) return false;
+            if (overrides.category === 'solicitations'   && !SOLICITATIONS.some(v => veh.includes(v)))   return false;
+            if (overrides.category === 'grants'          && !GRANTS.some(v => veh.includes(v)))          return false;
+          }
           if (overrides.keyword) {
             const toks = tokenize(overrides.keyword);
             const rfpToks = [...tokenize(opp.title), ...tokenize(opp.summary), ...opp.keywords.map(k=>k.toLowerCase())];
@@ -964,6 +1041,7 @@
         if (State.filters.setAside && !(parts.setAside > 0)) return false;
         if (State.filters.budgetFit && !(parts.budget > 0.2)) return false;
         if (State.filters.naicsFit && !(parts.naics > 0)) return false;
+        if (State.filters.contractFit && State.profile?.contractTypes?.length && parts.contract < 0.9) return false;
         return true;
       });
 
@@ -1020,7 +1098,9 @@
             <div class="flex items-center gap-2">
               <button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-save="${rfp.id}">Save</button>
               <button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-detail="${rfp.id}">Details</button>
-              <a class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500" href="${rfp.link}" target="_blank" rel="noopener">Open</a>
+              ${rfp.link && !rfp.link.includes('example.org')
+                ? `<a class="text-sm px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500" href="${rfp.link}" target="_blank" rel="noopener">Open</a>`
+                : `<button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 cursor-default" data-example-link>Open</button>`}
             </div>
           </div>
           <p class="mt-2 text-xs text-slate-400 italic">${explanation.review}</p>
@@ -1032,6 +1112,9 @@
         const item = State.matches.find(m => m.rfp.id === btn.getAttribute('data-save'));
         if (item) saveOpportunityToFirestore(item.rfp);
       }));
+      $$('#results [data-example-link]').forEach(btn => btn.addEventListener('click', () =>
+        alert('This is an example opportunity. No live solicitation URL is available.')
+      ));
     }
 
     /**
@@ -1046,10 +1129,11 @@
 
       const pool = getOpportunityPool();
       const overrides = {
-        keyword: ($('#searchKeyword')?.value || '').trim(),
-        naics:   ($('#searchNaics')?.value   || '').trim(),
-        location:($('#searchLocation')?.value|| '').trim(),
-        type:    $('#searchType')?.value      || '',
+        keyword:  ($('#searchKeyword')?.value  || '').trim(),
+        naics:    ($('#searchNaics')?.value    || '').trim(),
+        location: ($('#searchLocation')?.value || '').trim(),
+        type:     $('#searchType')?.value      || '',
+        category: $('#categoryFilter')?.value  || 'all',
       };
 
       const ranked = rankOpportunities(pool, signals, overrides);
@@ -1289,7 +1373,14 @@
       f.elements['industry'].value = p.industry || 'IT & Software';
       f.elements['location'].value = p.location || '';
       f.elements['naics'].value = (p.naics||[]).join(', ');
-      f.elements['setAside'].value = p.setAside || 'none';
+      // Handle both old string and new array format for set-aside
+      const setAsidesArr = Array.isArray(p.setAsides) ? p.setAsides
+        : [p.setAside].filter(s => s && s !== '');
+      Array.from(f.elements['setAside']?.options || []).forEach(o => {
+        o.selected = setAsidesArr.includes(o.value);
+      });
+      if (f.elements['pscFsc']) f.elements['pscFsc'].value = (p.pscFsc||[]).join(', ');
+      if (f.elements['nigp']) f.elements['nigp'].value = (p.nigp||[]).join(', ');
       f.elements['capabilities'].value = (p.capabilities||[]).join(', ');
       if (f.elements['capStatement']) f.elements['capStatement'].value = p.capStatement || '';
       f.elements['minBudget'].value = p.minBudget || '';
@@ -1435,11 +1526,13 @@
           industry: 'IT & Software',
           location: 'rockville, md',
           naics: [541511, 541512, 541519],
-          setAside: 'sbe',
+          setAsides: ['sbe'],
+          pscFsc: [],
+          nigp: [],
           capabilities: ['software development','web applications','cloud','cybersecurity','data analytics','AI','accessibility','system integration'],
           minBudget: 25000,
           maxBudget: 500000,
-          contractTypes: ['Fixed‑Price','Time & Materials','IDIQ']
+          contractTypes: ['RFP', 'IDIQ', 'Fixed‑Price']
         });
       });
 
@@ -1461,7 +1554,7 @@
         renderResults();
       }));
       $('#resetFilters').addEventListener('click', () => {
-        State.filters = { dueSoon: false, setAside: false, budgetFit: false, naicsFit: false };
+        State.filters = { dueSoon: false, setAside: false, budgetFit: false, naicsFit: false, contractFit: false };
         $$('.filter-chip').forEach(c => c.classList.remove('bg-slate-900','text-white','dark:bg-white','dark:text-slate-900'));
         renderResults();
       });
