@@ -1110,7 +1110,19 @@
      * Main entry point for “Find Opportunities Using My Business Profile”.
      * Runs the full pipeline: profile → signals → rank → render.
      */
-    function findByProfile() {
+    async function findByProfile() {
+      // Soft usage gate — only applies to signed-in free accounts
+      if (currentUser && userSub.status !== 'active') {
+        const runCount = userSub.monthlyMatchRunCount || 0;
+        const runLimit = userSub.matchRunLimit || 10;
+        if (runCount >= runLimit) {
+          $('#status').textContent =
+            `Monthly limit reached (${runLimit} match runs used). Subscribe to JudyBid Analyze™ to continue.`;
+          $('#subscribeBtn')?.classList.remove('hidden');
+          return;
+        }
+      }
+
       const profile = getBusinessProfile();
       const capInput = getCapabilityStatementInput();
       const signals = extractProfileSignals(profile, capInput);
@@ -1128,15 +1140,33 @@
       const ranked = rankOpportunities(pool, signals, overrides);
       State.matches = ranked;
       persistLocal();
-      saveMatchRunToFirestore(ranked); // Firestore: persists run summary + increments usage counter
       renderMatchResults(ranked);
 
+      // Show initial status immediately
       const strong   = ranked.filter(r => r.fitLabel === 'Strong fit').length;
       const possible = ranked.filter(r => r.fitLabel === 'Possible fit').length;
       let msg = `Reviewed ${ranked.length} opportunit${ranked.length === 1 ? 'y' : 'ies'} for ${profile.name}.`;
       if (strong)        msg += ` ${strong} strong fit${strong   > 1 ? 's' : ''}.`;
       else if (possible) msg += ` ${possible} possible fit${possible > 1 ? 's' : ''}.`;
       $('#status').textContent = msg;
+
+      // Persist to Firestore (awaited so local usage count is accurate for display)
+      await saveMatchRunToFirestore(ranked);
+
+      // Append usage line for signed-in free users
+      if (currentUser && userSub.status !== 'active') {
+        const runCount = userSub.monthlyMatchRunCount || 0;
+        const runLimit = userSub.matchRunLimit || 10;
+        const remaining = runLimit - runCount;
+        let usage = ` · ${runCount} of ${runLimit} monthly runs used.`;
+        if (remaining <= 0) {
+          usage += ' Subscribe to continue matching.';
+          $('#subscribeBtn')?.classList.remove('hidden');
+        } else if (remaining <= 2) {
+          usage += ` ${remaining} run${remaining > 1 ? 's' : ''} remaining this month.`;
+        }
+        $('#status').textContent = msg + usage;
+      }
     }
 
     // Optional LLM hook (backend required). Replace with your endpoint.
