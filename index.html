@@ -1481,7 +1481,7 @@
           if (data.url) {
             window.location.href = data.url;
           } else {
-            alert('Could not start checkout. Please try again.');
+            alert(`Checkout error: ${data.error || 'No URL returned'}`);
             btn.textContent = orig; btn.disabled = false;
           }
         } catch (e) {
