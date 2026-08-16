@@ -1465,6 +1465,39 @@
 
       $('#signOutBtn')?.addEventListener('click', () => fbSignOut());
 
+      // Stripe Subscribe button
+      $('#subscribeBtn')?.addEventListener('click', async () => {
+        const btn = $('#subscribeBtn');
+        const orig = btn.textContent;
+        btn.textContent = 'Redirecting…';
+        btn.disabled = true;
+        try {
+          const res = await fetch('/api/create-checkout-session', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ email: currentUser?.email || '' }),
+          });
+          const data = await res.json();
+          if (data.url) {
+            window.location.href = data.url;
+          } else {
+            alert('Could not start checkout. Please try again.');
+            btn.textContent = orig; btn.disabled = false;
+          }
+        } catch (e) {
+          console.error('Checkout error:', e);
+          alert('Checkout failed. Please try again.');
+          btn.textContent = orig; btn.disabled = false;
+        }
+      });
+
+      // Stripe checkout success notification
+      if (window._stripeCheckoutSuccess) {
+        setTimeout(() => {
+          $('#status').textContent = 'Subscription activated — thank you for subscribing to JudyBid Analyze™.';
+        }, 700);
+      }
+
       // Profile auto-save to Firestore on blur when signed in
       $$('#profileForm input, #profileForm select, #profileForm textarea').forEach(el => {
         el.addEventListener('blur', () => { if (currentUser) saveProfileToFirestore(); });
@@ -1597,7 +1630,16 @@
       });
     }
 
-    // Boot
+    // Boot — handle Stripe checkout return before Firebase init
+    (function () {
+      const cp = new URLSearchParams(window.location.search).get('checkout');
+      if (!cp) return;
+      window.history.replaceState({}, '', window.location.pathname);
+      if (cp === 'success') {
+        userSub.status = 'active'; // optimistic display until Stripe webhook confirms (V2)
+        window._stripeCheckoutSuccess = true;
+      }
+    })();
     restoreLocal();
     setupEvents();
     initFirebase(); // Firebase: init after DOM is ready; onAuthStateChanged handles profile load
