@@ -416,7 +416,7 @@
         signInBtn?.classList.add('hidden');
         userArea?.classList.remove('hidden'); userArea?.classList.add('flex');
         if (emailEl) emailEl.textContent = user.email || user.displayName || 'Signed in';
-        if (subBtn) subBtn.classList.toggle('hidden', userSub.status === 'active');
+        if (subBtn) subBtn.classList.toggle('hidden', userSub.status === 'active' || !!window._advisorAccess);
       } else {
         signInBtn?.classList.remove('hidden');
         userArea?.classList.add('hidden'); userArea?.classList.remove('flex');
@@ -1111,8 +1111,8 @@
      * Runs the full pipeline: profile → signals → rank → render.
      */
     async function findByProfile() {
-      // Soft usage gate — only applies to signed-in free accounts
-      if (currentUser && userSub.status !== 'active') {
+      // Soft usage gate — only applies to signed-in free accounts (bypassed for advisor access)
+      if (currentUser && userSub.status !== 'active' && !window._advisorAccess) {
         const runCount = userSub.monthlyMatchRunCount || 0;
         const runLimit = userSub.matchRunLimit || 10;
         if (runCount >= runLimit) {
@@ -1445,6 +1445,15 @@
     function setupEvents() {
       $('#year').textContent = new Date().getFullYear();
 
+      // Advisor test access badge
+      if (window._advisorAccess) {
+        const badge = document.createElement('span');
+        badge.className = 'text-xs px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 font-medium';
+        badge.textContent = 'Advisor Test Access';
+        const ref = $('#exportBtn');
+        ref?.parentNode?.insertBefore(badge, ref);
+      }
+
       // Firebase Auth UI events
       $('#signInBtn')?.addEventListener('click', showAuthModal);
       $('#closeAuthModal')?.addEventListener('click', hideAuthModal);
@@ -1668,6 +1677,17 @@
       if (cp === 'success') {
         userSub.status = 'active'; // optimistic display until Stripe webhook confirms (V2)
         window._stripeCheckoutSuccess = true;
+      }
+    })();
+    // Advisor / testing access (temporary — expires 2026-08-25 23:59 ET)
+    // To disable early: change ADVISOR_TOKEN to any other string, redeploy.
+    (function () {
+      const ADVISOR_TOKEN  = 'judybid-v1';
+      const ADVISOR_EXPIRY = Date.UTC(2026, 7, 26, 3, 59); // 2026-08-25 23:59 ET = 2026-08-26 03:59 UTC
+      const param = new URLSearchParams(window.location.search).get('advisor_test');
+      window.history.replaceState({}, '', window.location.pathname); // always clean URL
+      if (param === ADVISOR_TOKEN && Date.now() < ADVISOR_EXPIRY) {
+        window._advisorAccess = true;
       }
     })();
     restoreLocal();
