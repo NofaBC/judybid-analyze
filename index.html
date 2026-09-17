@@ -416,7 +416,7 @@
         signInBtn?.classList.add('hidden');
         userArea?.classList.remove('hidden'); userArea?.classList.add('flex');
         if (emailEl) emailEl.textContent = user.email || user.displayName || 'Signed in';
-        if (subBtn) subBtn.classList.toggle('hidden', userSub.status === 'active' || !!window._advisorAccess);
+        if (subBtn) subBtn.classList.toggle('hidden', ['active','past_due'].includes(userSub.status) || !!window._advisorAccess);
       } else {
         signInBtn?.classList.remove('hidden');
         userArea?.classList.add('hidden'); userArea?.classList.remove('flex');
@@ -1111,8 +1111,8 @@
      * Runs the full pipeline: profile → signals → rank → render.
      */
     async function findByProfile() {
-      // Soft usage gate — only applies to signed-in free accounts (bypassed for advisor access)
-      if (currentUser && userSub.status !== 'active' && !window._advisorAccess) {
+      // Soft usage gate — only applies to signed-in free accounts (bypassed for advisor/past_due)
+      if (currentUser && !['active','past_due'].includes(userSub.status) && !window._advisorAccess) {
         const runCount = userSub.monthlyMatchRunCount || 0;
         const runLimit = userSub.matchRunLimit || 10;
         if (runCount >= runLimit) {
@@ -1154,7 +1154,7 @@
       await saveMatchRunToFirestore(ranked);
 
       // Append usage line for signed-in free users
-      if (currentUser && userSub.status !== 'active') {
+      if (currentUser && !['active','past_due'].includes(userSub.status)) {
         const runCount = userSub.monthlyMatchRunCount || 0;
         const runLimit = userSub.matchRunLimit || 10;
         const remaining = runLimit - runCount;
@@ -1506,15 +1506,20 @@
 
       // Stripe Subscribe button
       $('#subscribeBtn')?.addEventListener('click', async () => {
+        // User must be signed in so we can obtain a verified Firebase ID token
+        if (!currentUser) { showAuthModal(); return; }
         const btn = $('#subscribeBtn');
         const orig = btn.textContent;
         btn.textContent = 'Redirecting…';
         btn.disabled = true;
         try {
+          // Get a short-lived Firebase ID token — verified server-side to bind the
+          // Stripe session to the correct Firebase UID without trusting the client.
+          const idToken = await currentUser.getIdToken();
           const res = await fetch('/api/create-checkout-session', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ email: currentUser?.email || '' }),
+            body:    JSON.stringify({ email: currentUser.email || '', idToken }),
           });
           const data = await res.json();
           if (data.url) {
