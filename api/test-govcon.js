@@ -1,11 +1,8 @@
 // api/test-govcon.js
 // ⚠️  TEMPORARY DIAGNOSTIC ENDPOINT — DELETE BEFORE PRODUCTION IMPLEMENTATION ⚠️
 //
-// Purpose: make one real call to the GovCon Data API and return the raw response
-// so we can inspect the exact schema before writing the normalizer.
-//
-// Security: reads GOVCONTRACT_API_KEY server-side only — never exposed to browser.
-// The API key is NOT included in any response field or log line.
+// Confirmed endpoint: GET https://govcon-data.p.rapidapi.com/contracts?page=1&limit=50
+// API key is server-side only — never exposed to browser or logs.
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).end();
@@ -15,84 +12,86 @@ export default async function handler(req, res) {
 
   if (!apiKey || !apiHost) {
     return res.status(503).json({
-      _diagnostic: true,
-      error:            'Missing env vars',
-      keyConfigured:    !!apiKey,
-      hostConfigured:   !!apiHost,
+      error: 'Missing GOVCONTRACT_API_KEY or GOVCONTRACT_API_HOST',
+      keyConfigured:  !!apiKey,
+      hostConfigured: !!apiHost,
     });
   }
 
-  // RapidAPI convention: URL is https://{host}{path}?params
-  // Try the most likely paths in order; stop on the first non-404.
-  const PATHS = [
-    '/searchContracts',
-    '/contracts/search',
-    '/search',
-    '/v1/searchContracts',
-    '/api/searchContracts',
-    '/api/contracts',
-  ];
+  const url = `https://${apiHost}/contracts?page=1&limit=10`; // limit=10 keeps response small for inspection
 
-  // Small, controlled query — adjust if the API uses different param names
-  const QUERY = new URLSearchParams({
-    state:  'MD',
-    search: 'software',
-    page:   '1',
-  });
+  let httpStatus, contentType, rawBody;
 
-  const attempts = [];
+  try {
+    const apiRes = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'x-rapidapi-key':  apiKey,
+        'x-rapidapi-host': apiHost,
+        'Accept':          'application/json',
+      },
+    });
 
-  for (const path of PATHS) {
-    const url = `https://${apiHost}${path}?${QUERY.toString()}`;
-
-    let attempt = { path, status: null, contentType: null, body: null, error: null };
+    httpStatus   = apiRes.status;
+    contentType  = apiRes.headers.get('content-type');
+    const text   = await apiRes.text();
 
     try {
-      const apiRes = await fetch(url, {
-        headers: {
-          'X-RapidAPI-Key':  apiKey,   // server-side only, never logged
-          'X-RapidAPI-Host': apiHost,
-          'Accept':          'application/json',
-        },
-      });
-
-      attempt.status      = apiRes.status;
-      attempt.contentType = apiRes.headers.get('content-type');
-
-      const text = await apiRes.text();
-      try {
-        attempt.body = JSON.parse(text);
-      } catch {
-        attempt.body = text;   // keep raw text if not valid JSON
-      }
-
-    } catch (e) {
-      attempt.error = e.message;
+      rawBody = JSON.parse(text);
+    } catch {
+      rawBody = text;
     }
 
-    attempts.push(attempt);
-
-    // Stop on the first response that is not 404/405 (hit or real error)
-    if (attempt.status !== null && attempt.status !== 404 && attempt.status !== 405) {
-      break;
-    }
+  } catch (e) {
+    return res.status(200).json({
+      _diagnostic:  'TEMPORARY ENDPOINT — DELETE BEFORE PRODUCTION',
+      _apiHost:      apiHost,
+      networkError:  e.message,
+    });
   }
 
-  // Summarise the successful hit (or the last attempt)
-  const hit = attempts.find(a => a.status === 200) || attempts[attempts.length - 1];
+  // ── Schema summary ────────────────────────────────────────────────────────
+  const topLevelFields = typeof rawBody === 'object' && rawBody !== null
+    ? Object.keys(rawBody)
+    : null;
+
+  // Try to find the array of contracts — common field names
+  const dataArray =
+    rawBody?.contracts   ??
+    rawBody?.data        ??
+    rawBody?.results     ??
+    rawBody?.items       ??
+    rawBody?.records     ??
+    null;
+
+  const sampleRecord   = Array.isArray(dataArray) ? dataArray[0]  ?? null : null;
+  const sampleFields   = sampleRecord ? Object.keys(sampleRecord) : null;
+
+  // Pagination — common shapes
+  const pagination =
+    rawBody?.pagination  ??
+    rawBody?.meta        ??
+    rawBody?.page_info   ??
+    {
+      total:    rawBody?.total    ?? rawBody?.count    ?? null,
+      page:     rawBody?.page     ?? rawBody?.current_page ?? null,
+      per_page: rawBody?.per_page ?? rawBody?.limit     ?? null,
+      has_next: rawBody?.has_next ?? rawBody?.next_page ?? null,
+    };
 
   res.status(200).json({
-    _diagnostic:    'TEMPORARY ENDPOINT — DELETE BEFORE PRODUCTION',
-    _apiHost:        apiHost,     // host is a domain, not a secret
-    _pathsTried:     attempts.map(a => `${a.status ?? 'ERR'} ${a.path}`),
-    _successfulPath: hit?.path ?? null,
-    _httpStatus:     hit?.status ?? null,
-    _contentType:    hit?.contentType ?? null,
-
-    // Raw body of the first successful (or last) response:
-    raw: hit?.body ?? null,
-
-    // If it errored at network level:
-    networkError: hit?.error ?? null,
+    _diagnostic:       'TEMPORARY ENDPOINT — DELETE BEFORE PRODUCTION',
+    _endpointCalled:   `https://${apiHost}/contracts?page=1&limit=10`,
+    _httpStatus:        httpStatus,
+    _contentType:       contentType,
+    _topLevelFields:    topLevelFields,
+    _dataArrayField:    dataArray !== null
+      ? (rawBody?.contracts ? 'contracts' : rawBody?.data ? 'data' : rawBody?.results ? 'results' : rawBody?.items ? 'items' : 'records')
+      : 'NOT FOUND — check raw for structure',
+    _recordCount:       Array.isArray(dataArray) ? dataArray.length : null,
+    _sampleRecordFields: sampleFields,
+    _pagination:        pagination,
+    _sampleRecord:      sampleRecord,
+    raw:                rawBody,   // full unmodified response
   });
 }
