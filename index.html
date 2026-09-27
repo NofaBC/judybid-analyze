@@ -817,9 +817,8 @@
     }
 
     /**
-     * Returns the current opportunity pool.
-     * Loads example opportunities automatically if the pool is empty.
-     * Future: replace or extend this function to fetch from an API endpoint.
+     * Returns the example opportunity pool (fallback when live search is unavailable).
+     * Loads SAMPLE_RFPS if the pool is empty.
      */
     function getOpportunityPool() {
       if (!State.rfps.length) {
@@ -827,6 +826,30 @@
         State.rfps = [...SAMPLE_RFPS];
       }
       return State.rfps;
+    }
+
+    /**
+     * Fetches live federal opportunities from SAM.gov via /api/search-opportunities.
+     * Sends the user's NAICS codes and capability keywords to the serverless function.
+     * Returns a normalized JudyBid opportunity array.
+     * Throws on network or API error so the caller can fall back to examples.
+     */
+    async function fetchLiveOpportunities(signals, overrides) {
+      const res = await fetch('/api/search-opportunities', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          naics:    signals.naics.slice(0, 3),
+          keywords: signals.keywords.slice(0, 10),
+          category: overrides.category || 'all',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `SAM.gov API returned ${res.status}`);
+      }
+      const data = await res.json();
+      return data.opportunities || [];
     }
 
     /**
@@ -1083,7 +1106,7 @@
             ${(explanation.chips||[]).map(c => `<span class="px-2 py-1 rounded-full ${chipClass[c.type]||chipClass.neutral}">${c.label}</span>`).join('')}
           </div>
           <div class="mt-3 flex items-center justify-between">
-            <div class="text-xs text-slate-500">Budget: ${rfp.minBudget ? `$${rfp.minBudget.toLocaleString()}` : '\u2014'} \u2013 ${rfp.maxBudget ? `$${rfp.maxBudget.toLocaleString()}` : '\u2014'} \u2022 Source: ${rfp.source}</div>
+            <div class="text-xs text-slate-500">${rfp.solicitationNumber ? `Solicitation: ${rfp.solicitationNumber} \u00b7 ` : ''}${rfp.postedDate ? `Posted: ${fmtDate(rfp.postedDate)} \u00b7 ` : ''}Budget: ${rfp.minBudget ? `$${rfp.minBudget.toLocaleString()}` : '\u2014'} \u2013 ${rfp.maxBudget ? `$${rfp.maxBudget.toLocaleString()}` : '\u2014'} \u2022 Source: ${rfp.source}</div>
             <div class="flex items-center gap-2">
               <button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-save="${rfp.id}">Save</button>
               <button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-detail="${rfp.id}">Details</button>
@@ -1128,7 +1151,6 @@
       const signals = extractProfileSignals(profile, capInput);
       State.profile = profile;
 
-      const pool = getOpportunityPool();
       const overrides = {
         keyword:  ($('#searchKeyword')?.value  || '').trim(),
         naics:    ($('#searchNaics')?.value    || '').trim(),
@@ -1137,21 +1159,41 @@
         category: $('#categoryFilter')?.value  || 'all',
       };
 
+      // Show loading state while SAM.gov is called
+      $('#status').textContent = 'Searching live federal opportunities from SAM.gov…';
+      $('#results').innerHTML  = '<div class="p-6 text-sm text-slate-500">Searching SAM.gov for opportunities matching your profile…</div>';
+
+      // Fetch live opportunities; fall back to example data if SAM.gov is unavailable
+      let pool;
+      let usedLiveSearch = true;
+      try {
+        pool = await fetchLiveOpportunities(signals, overrides);
+        State.rfps       = pool;
+        State.useExamples = false;
+      } catch (e) {
+        console.error('SAM.gov search failed:', e.message);
+        usedLiveSearch = false;
+        pool = getOpportunityPool(); // fallback — preserves Manual Add and Load Example flows
+        $('#status').textContent = `SAM.gov unavailable (${e.message}). Showing example opportunities.`;
+      }
+
       const ranked = rankOpportunities(pool, signals, overrides);
       State.matches = ranked;
       persistLocal();
       renderMatchResults(ranked);
 
-      // Show initial status immediately
+      // Build status message
       const strong   = ranked.filter(r => r.fitLabel === 'Strong fit').length;
       const possible = ranked.filter(r => r.fitLabel === 'Possible fit').length;
-      let msg = `Reviewed ${ranked.length} opportunit${ranked.length === 1 ? 'y' : 'ies'} for ${profile.name}.`;
+      let msg = usedLiveSearch
+        ? `Found ${ranked.length} live federal opportunit${ranked.length === 1 ? 'y' : 'ies'} from SAM.gov.`
+        : `Reviewed ${ranked.length} opportunit${ranked.length === 1 ? 'y' : 'ies'} for ${profile.name}.`;
       if (strong)        msg += ` ${strong} strong fit${strong   > 1 ? 's' : ''}.`;
       else if (possible) msg += ` ${possible} possible fit${possible > 1 ? 's' : ''}.`;
       $('#status').textContent = msg;
 
-      // Persist to Firestore (awaited so local usage count is accurate for display)
-      await saveMatchRunToFirestore(ranked);
+      // Persist match run to Firestore (only when results are actually shown)
+      if (ranked.length > 0) await saveMatchRunToFirestore(ranked);
 
       // Append usage line for signed-in free users
       if (currentUser && !['active','past_due'].includes(userSub.status)) {
@@ -1165,7 +1207,7 @@
         } else if (remaining <= 2) {
           usage += ` ${remaining} run${remaining > 1 ? 's' : ''} remaining this month.`;
         }
-        $('#status').textContent = msg + usage;
+        if (ranked.length > 0) $('#status').textContent = msg + usage;
       }
     }
 
