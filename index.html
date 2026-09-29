@@ -210,14 +210,15 @@
       <div class="rounded-xl border border-slate-200/80 dark:border-slate-800 p-5 bg-white dark:bg-slate-900/60 shadow-sm space-y-3">
         <h2 class="text-lg font-semibold">Opportunity Search</h2>
 
-        <!-- Opportunity Type / Category Filter -->
+        <!-- Opportunity Source Filter -->
         <label class="block">
-          <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Opportunity Type</span>
+          <span class="text-xs font-medium text-slate-600 dark:text-slate-400">Opportunity Source</span>
           <select id="categoryFilter" class="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white/80 dark:bg-slate-900/50 px-3 py-1.5 text-sm">
-            <option value="all">All Opportunities</option>
-            <option value="market-research">Market Research (RFI, Sources Sought, Pre‑Solicitation…)</option>
-            <option value="solicitations">Solicitations (RFP, IFB, RFQ, Bid…)</option>
-            <option value="grants">Grants (Grant, NOFO, Notice of Funding…)</option>
+            <option value="all">All Sources</option>
+            <option value="federal">Federal (SAM.gov)</option>
+            <option value="state-local">State / Local</option>
+            <option value="education">Education</option>
+            <option value="grants">Grants</option>
           </select>
         </label>
 
@@ -805,7 +806,8 @@
         contractTypes: profile.contractTypes || [],
         minBudget: profile.minBudget,
         maxBudget: profile.maxBudget,
-        keywords: unique([...profile.capabilities, ...capTokens]),
+        // Include profile NIGP codes in signals so they can match Tango category_codes
+        keywords: unique([...profile.capabilities, ...capTokens, ...(profile.nigp || [])]),
         profileKeywords: profile.capabilities,
         capKeywords: capTokens,
         capLocations,
@@ -835,21 +837,25 @@
      * Throws on network or API error so the caller can fall back to examples.
      */
     async function fetchLiveOpportunities(signals, overrides) {
+      // Extract 2-letter state abbreviations from user's served locations (for Tango state filter)
+      const stateAbbrs = (signals.servedLocations || []).filter(t => t.length === 2).slice(0, 5);
+
       const res = await fetch('/api/search-opportunities', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           naics:    signals.naics.slice(0, 3),
           keywords: signals.keywords.slice(0, 10),
-          category: overrides.category || 'all',
+          source:   overrides.category || 'all',  // 'all'|'federal'|'state-local'|'education'|'grants'
+          states:   stateAbbrs,                   // for Tango state filter
         }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `SAM.gov API returned ${res.status}`);
+        throw new Error(err.error || `Search API returned ${res.status}`);
       }
       const data = await res.json();
-      return data.opportunities || [];
+      return { opportunities: data.opportunities || [], sources: data.sources || {} };
     }
 
     /**
@@ -870,8 +876,11 @@
         : 0;
 
       // NAICS alignment
+      // Neutral (0.3) when opportunity has no NAICS codes — common in SLED/Tango records
       const matchedNaics = (opp.naics || []).filter(n => signals.naics.includes(n));
-      const naicsScore = matchedNaics.length > 0 ? 1 : 0;
+      const naicsScore = (opp.naics?.length > 0)
+        ? (matchedNaics.length > 0 ? 1 : 0)
+        : 0.3; // neutral for untagged NAICS (SLED mid-migration)
 
       // Set-aside fit
       let setAsideScore = 0.2;
@@ -1106,7 +1115,7 @@
             ${(explanation.chips||[]).map(c => `<span class="px-2 py-1 rounded-full ${chipClass[c.type]||chipClass.neutral}">${c.label}</span>`).join('')}
           </div>
           <div class="mt-3 flex items-center justify-between">
-            <div class="text-xs text-slate-500">${rfp.solicitationNumber ? `Solicitation: ${rfp.solicitationNumber} \u00b7 ` : ''}${rfp.postedDate ? `Posted: ${fmtDate(rfp.postedDate)} \u00b7 ` : ''}Budget: ${rfp.minBudget ? `$${rfp.minBudget.toLocaleString()}` : '\u2014'} \u2013 ${rfp.maxBudget ? `$${rfp.maxBudget.toLocaleString()}` : '\u2014'} \u2022 Source: ${rfp.source}</div>
+            <div class="text-xs text-slate-500">${rfp.solicitationNumber ? `Solicitation: ${rfp.solicitationNumber} \u00b7 ` : ''}${rfp.postedDate ? `Posted: ${fmtDate(rfp.postedDate)} \u00b7 ` : ''}${rfp.jurisdictionDisplay ? `${rfp.jurisdictionDisplay} \u00b7 ` : ''}${rfp.source === 'Tango' && rfp.portalName ? `via ${rfp.portalName} \u00b7 ` : ''}Budget: ${rfp.minBudget ? `$${rfp.minBudget.toLocaleString()}` : '\u2014'} \u2013 ${rfp.maxBudget ? `$${rfp.maxBudget.toLocaleString()}` : '\u2014'} \u2022 Source: ${rfp.source}</div>
             <div class="flex items-center gap-2">
               <button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-save="${rfp.id}">Save</button>
               <button class="text-sm px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" data-detail="${rfp.id}">Details</button>
@@ -1159,22 +1168,33 @@
         category: $('#categoryFilter')?.value  || 'all',
       };
 
-      // Show loading state while SAM.gov is called
-      $('#status').textContent = 'Searching live federal opportunities from SAM.gov…';
-      $('#results').innerHTML  = '<div class="p-6 text-sm text-slate-500">Searching SAM.gov for opportunities matching your profile…</div>';
+      // Loading message — source-aware
+      const _srcLabels = {
+        'all':         'federal and state/local opportunities',
+        'federal':     'federal opportunities from SAM.gov',
+        'state-local': 'state and local opportunities',
+        'education':   'education procurement opportunities',
+        'grants':      'grant opportunities',
+      };
+      const _srcLabel = _srcLabels[overrides.category] || 'opportunities';
+      $('#status').textContent = `Searching ${_srcLabel}…`;
+      $('#results').innerHTML  = `<div class="p-6 text-sm text-slate-500">Searching for opportunities matching your profile…</div>`;
 
-      // Fetch live opportunities; fall back to example data if SAM.gov is unavailable
+      // Fetch live opportunities; fall back to examples on complete failure
       let pool;
       let usedLiveSearch = true;
+      let liveSourceInfo = {};
       try {
-        pool = await fetchLiveOpportunities(signals, overrides);
-        State.rfps       = pool;
+        const liveResult  = await fetchLiveOpportunities(signals, overrides);
+        pool              = liveResult.opportunities;
+        liveSourceInfo    = liveResult.sources || {};
+        State.rfps        = pool;
         State.useExamples = false;
       } catch (e) {
-        console.error('SAM.gov search failed:', e.message);
+        console.error('Live search failed:', e.message);
         usedLiveSearch = false;
-        pool = getOpportunityPool(); // fallback — preserves Manual Add and Load Example flows
-        $('#status').textContent = `SAM.gov unavailable (${e.message}). Showing example opportunities.`;
+        pool = getOpportunityPool(); // fallback — Manual Add and Load Examples still work
+        $('#status').textContent = `Live search unavailable (${e.message}). Showing example opportunities.`;
       }
 
       const ranked = rankOpportunities(pool, signals, overrides);
@@ -1182,17 +1202,31 @@
       persistLocal();
       renderMatchResults(ranked);
 
-      // Build status message
-      const strong   = ranked.filter(r => r.fitLabel === 'Strong fit').length;
-      const possible = ranked.filter(r => r.fitLabel === 'Possible fit').length;
-      let msg = usedLiveSearch
-        ? `Found ${ranked.length} live federal opportunit${ranked.length === 1 ? 'y' : 'ies'} from SAM.gov.`
-        : `Reviewed ${ranked.length} opportunit${ranked.length === 1 ? 'y' : 'ies'} for ${profile.name}.`;
-      if (strong)        msg += ` ${strong} strong fit${strong   > 1 ? 's' : ''}.`;
-      else if (possible) msg += ` ${possible} possible fit${possible > 1 ? 's' : ''}.`;
+      // Build status message with per-source counts
+      let msg = '';
+      if (usedLiveSearch) {
+        const samCnt   = liveSourceInfo.sam?.count   || 0;
+        const tangoCnt = liveSourceInfo.tango?.count || 0;
+        const samErr   = liveSourceInfo.sam?.error;
+        const tangoErr = liveSourceInfo.tango?.error;
+        const _parts = [];
+        if (samCnt   > 0) _parts.push(`${samCnt} federal`);
+        if (tangoCnt > 0) _parts.push(`${tangoCnt} state/local/education`);
+        msg = _parts.length > 0
+          ? `Found ${_parts.join(' and ')} opportunit${ranked.length === 1 ? 'y' : 'ies'}.`
+          : 'No matching opportunities found.';
+        if (samErr   && samCnt   === 0) msg += ' (Federal search unavailable.)';
+        if (tangoErr && tangoCnt === 0) msg += ' (State/local search unavailable.)';
+      } else {
+        const strong   = ranked.filter(r => r.fitLabel === 'Strong fit').length;
+        const possible = ranked.filter(r => r.fitLabel === 'Possible fit').length;
+        msg = `Reviewed ${ranked.length} opportunit${ranked.length === 1 ? 'y' : 'ies'} for ${profile.name}.`;
+        if (strong)        msg += ` ${strong} strong fit${strong   > 1 ? 's' : ''}.`;
+        else if (possible) msg += ` ${possible} possible fit${possible > 1 ? 's' : ''}.`;
+      }
       $('#status').textContent = msg;
 
-      // Persist match run to Firestore (only when results are actually shown)
+      // Persist match run to Firestore (only when results are shown)
       if (ranked.length > 0) await saveMatchRunToFirestore(ranked);
 
       // Append usage line for signed-in free users
