@@ -15,6 +15,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <!-- PDF.js for client-side capability statement extraction (no server, no file upload) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
     /* Fallback styles if Tailwind CDN is blocked */
     .tw-hidden-if-no-tailwind { display: none; }
@@ -191,9 +193,9 @@
           <label class="block">
             <span class="text-sm font-medium">Upload Capability Statement</span>
             <!-- File content extraction is a future enhancement; filename is stored as a readiness signal -->
-            <input type="file" id="capStatementFile" accept=".pdf,.docx,.doc,.txt" class="mt-1 block text-sm text-slate-600 dark:text-slate-300 w-full cursor-pointer" />
-            <p id="capFileLabel" class="text-xs text-slate-400 mt-1 hidden"></p>
-            <p class="text-xs text-slate-400 mt-1">Clean V1 uses pasted capability statement text for matching. Uploaded PDF parsing is coming soon.</p>
+            <input type="file" id="capStatementFile" accept=".pdf,.txt" class="mt-1 block text-sm text-slate-600 dark:text-slate-300 w-full cursor-pointer" />
+            <p id="capFileLabel" class="text-xs mt-1 hidden"></p>
+            <p class="text-xs text-slate-400 mt-1">Supported: PDF and TXT (max 5 MB). Text is extracted automatically for matching.</p>
           </label>
         </div>
 
@@ -739,7 +741,7 @@
     function getCapabilityStatementInput() {
       const f = $('#profileForm');
       const text = (f?.elements['capStatement']?.value || '').trim();
-      // File content extraction is a future enhancement; filename is a readiness signal only.
+      // Text is extracted client-side (PDF.js / FileReader) and pre-filled into the textarea.
       const fileInput = $('#capStatementFile');
       const file = fileInput?.files?.[0] || null;
       return { text, fileName: file?.name || null, hasFile: !!file };
@@ -984,7 +986,7 @@
       if (!signals.hasCapStatement && !signals.capFileName) {
         concerns.push(`Adding a capability statement may improve match quality.`);
       } else if (!signals.hasCapStatement && signals.capFileName) {
-        concerns.push(`Uploaded file detected, but Clean V1 uses pasted text for matching. Paste capability statement text for stronger match quality.`);
+        concerns.push(`File attached but text could not be extracted. Paste the capability statement text for stronger match quality.`);
       }
 
       // Review guidance
@@ -1515,6 +1517,47 @@
       a.download = 'judybid_matches.csv'; a.click();
     }
 
+    // ── Capability statement file extraction ─────────────────────────────────
+    // Client-side only. Files never leave the browser. PDF.js for PDF; FileReader for TXT.
+    // Extracted text is pre-filled into the capStatement textarea so extractProfileSignals()
+    // consumes it without any further changes.
+
+    const CAP_FILE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+
+    // Set PDF.js worker URL before first use (required by pdfjs-dist)
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    async function extractCapStatementText(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+
+      if (ext === 'txt') {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload  = e => resolve((e.target.result || '').trim());
+          reader.onerror = () => reject(new Error('Could not read text file'));
+          reader.readAsText(file);
+        });
+      }
+
+      if (ext === 'pdf') {
+        if (typeof pdfjsLib === 'undefined') throw new Error('PDF parser not loaded — check network connection');
+        const buf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+        const pages = [];
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page    = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          pages.push(content.items.map(it => it.str).join(' '));
+        }
+        return pages.join('\n').trim();
+      }
+
+      throw new Error('Unsupported file type — upload a PDF or TXT');
+    }
+
     /*********************************
      * Event Wiring                  *
      *********************************/
@@ -1645,12 +1688,80 @@
         State.feeds.push(url); $('#customFeed').value = ''; renderFeeds(); persistLocal();
       });
 
-      // Capability statement file upload — display filename as a readiness signal
-      $('#capStatementFile')?.addEventListener('change', () => {
-        const file = $('#capStatementFile').files[0];
-        const lbl = $('#capFileLabel');
-        if (file && lbl) { lbl.textContent = `Attached: ${file.name}`; lbl.classList.remove('hidden'); }
-        else if (lbl) lbl.classList.add('hidden');
+      // Capability statement file upload — extract text client-side and pre-fill the textarea
+      $('#capStatementFile')?.addEventListener('change', async () => {
+        const fileInput = $('#capStatementFile');
+        const file = fileInput?.files?.[0];
+        const lbl  = $('#capFileLabel');
+
+        // Reset status label
+        if (lbl) { lbl.textContent = ''; lbl.className = 'text-xs mt-1 hidden'; }
+
+        if (!file) return;
+
+        // File size guard
+        if (file.size > CAP_FILE_MAX_BYTES) {
+          if (lbl) {
+            lbl.textContent = 'File too large (max 5 MB). Paste the text instead.';
+            lbl.className = 'text-xs mt-1 text-rose-500 dark:text-rose-400';
+            lbl.classList.remove('hidden');
+          }
+          fileInput.value = '';
+          return;
+        }
+
+        // File type guard (accept attr already filters, but double-check)
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (!['pdf', 'txt'].includes(ext)) {
+          if (lbl) {
+            lbl.textContent = 'Unsupported file type. Upload a PDF or TXT file.';
+            lbl.className = 'text-xs mt-1 text-rose-500 dark:text-rose-400';
+            lbl.classList.remove('hidden');
+          }
+          fileInput.value = '';
+          return;
+        }
+
+        // Show processing state
+        if (lbl) {
+          lbl.textContent = `Reading ${file.name}\u2026`;
+          lbl.className = 'text-xs mt-1 text-slate-400';
+          lbl.classList.remove('hidden');
+        }
+
+        try {
+          const extracted = await extractCapStatementText(file);
+
+          if (!extracted || extracted.length < 20) throw new Error('No readable text found in file');
+
+          // Pre-fill the textarea; append if user already has pasted text
+          const capTA = $('#profileForm')?.elements['capStatement'];
+          if (capTA) {
+            const existing = capTA.value.trim();
+            if (!existing) {
+              capTA.value = extracted;
+            } else if (!existing.includes(extracted.slice(0, 80).trim())) {
+              // Append only if the file text isn't already present
+              capTA.value = existing + '\n\n' + extracted;
+            }
+            if (currentUser) saveProfileToFirestore();
+          }
+
+          const wordCount = extracted.split(/\s+/).filter(Boolean).length;
+          if (lbl) {
+            lbl.textContent = `Capability statement extracted (${wordCount.toLocaleString()} words). Ready for matching.`;
+            lbl.className = 'text-xs mt-1 text-emerald-600 dark:text-emerald-400';
+            lbl.classList.remove('hidden');
+          }
+
+        } catch (e) {
+          console.warn('Cap statement extraction failed:', e.message);
+          if (lbl) {
+            lbl.textContent = 'Could not read this file. Paste the capability statement text instead.';
+            lbl.className = 'text-xs mt-1 text-rose-500 dark:text-rose-400';
+            lbl.classList.remove('hidden');
+          }
+        }
       });
 
       // Reset profile
