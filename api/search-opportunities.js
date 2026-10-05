@@ -84,7 +84,37 @@ function samDate(d) {
   return `${mm}/${dd}/${d.getFullYear()}`;
 }
 
-// ── Normalize one SAM.gov opportunity → JudyBid internal format ─────────────
+// ── Detect whether a URL is a direct solicitation link or a generic portal page ──
+// Used to label state/local links accurately when deep linking is not available.
+// Pattern: URLs with fewer than 2 path segments are almost always a portal root.
+// Known portal-only hosts are listed explicitly.
+function detectLinkType(url) {
+  if (!url || url === '#') return 'none';
+  try {
+    const u        = new URL(url);
+    const host     = u.hostname.toLowerCase();
+    const segments = u.pathname.replace(/\/+$/, '').split('/').filter(Boolean);
+
+    // Known hosts that return portal root URLs rather than per-solicitation links
+    const PORTAL_HOSTS = [
+      'coloradovss.com',
+      'bidnetdirect.com',
+      'govbuys.com',
+      'biddingo.com',
+      'onvia.com',
+      'bidspeed.com',
+      'mmpurchasing.com',
+    ];
+    if (PORTAL_HOSTS.some(h => host === h || host.endsWith('.' + h))) return 'portal';
+
+    // Root or single-segment paths are portal homepages, not specific solicitations
+    if (segments.length < 2) return 'portal';
+
+    return 'direct';
+  } catch { return 'portal'; }
+}
+
+// ── Normalize one SAM.gov opportunity → JudyBid internal format ─────────────────
 function normalizeSamRecord(opp) {
   const naicsList = [];
   const addNaics = code => {
@@ -138,6 +168,7 @@ function normalizeSamRecord(opp) {
     vehicle,
     link:               opp.uiLink || '#',
     source:             'SAM.gov',
+    linkType:           'direct',   // SAM.gov uiLink is always a specific solicitation URL
   };
 }
 
@@ -187,6 +218,7 @@ function normalizeTangoRecord(opp) {
     vehicle,
     link:                opp.source_url || '#',
     source:              'Tango',
+    linkType:            detectLinkType(opp.source_url),  // 'direct' | 'portal' | 'none'
 
     // SLED-specific display fields
     jurisdictionLevel:   level,
