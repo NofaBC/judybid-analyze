@@ -644,6 +644,35 @@
 
     function unique(arr) { return Array.from(new Set(arr)); }
 
+    // ── Stopword filter for profile/capability keywords ──────────────────────
+    // Applied to signals.keywords so filler words never appear as matched tokens,
+    // never pollute the SAM.gov q= param, and never show in explanation chips.
+    const STOPWORDS = new Set([
+      'a','an','and','are','as','at','be','by','for','from','in','is','it',
+      'of','on','or','the','to','with','we','our','your','their','this','that',
+      'these','those','can','will','all','any','but','not','was','were','been',
+      'have','has','had','do','does','did','so','if','up','no','its','also',
+      'they','them','then','than','more','into','over','about','after','before',
+      'between','through','during','other','such','which','would','could',
+      'should','shall','may','use','used','using','provide','providing',
+      'including','includes','various','specific','general','related',
+      'required','within','across',
+      // Business/government filler
+      'service','services','business','company','commercial','government',
+      'solution','solutions','support',
+    ]);
+    // Short tokens (length < 3) to keep — meaningful domain codes
+    const SHORT_ALLOWLIST = new Set(['ai','it','bi','db','qa','ui','ux','ml','ip','os','id','gis','api','erp','crm','cms']);
+
+    /** Remove stopwords and meaningless short tokens from a keyword array. */
+    function filterKeywords(tokens) {
+      return tokens.filter(t => {
+        if (STOPWORDS.has(t)) return false;
+        if (t.length < 3 && !SHORT_ALLOWLIST.has(t)) return false;
+        return true;
+      });
+    }
+
     function readProfile() {
       const form = $('#profileForm');
       const get = n => form.elements[n]?.value?.trim?.() ?? '';
@@ -810,7 +839,7 @@
         minBudget: profile.minBudget,
         maxBudget: profile.maxBudget,
         // Include profile NIGP codes in signals so they can match Tango category_codes
-        keywords: unique([...profile.capabilities, ...capTokens, ...(profile.nigp || [])]),
+        keywords: filterKeywords(unique([...profile.capabilities, ...capTokens, ...(profile.nigp || [])])),
         profileKeywords: profile.capabilities,
         capKeywords: capTokens,
         capLocations,
@@ -957,7 +986,13 @@
 
       const parts = { keyword: keywordScore, naics: naicsScore, setAside: setAsideScore, location: locationScore, budget: budgetScore, contract: contractScore, urgency: urgencyScore };
       const weights = { keyword: 0.38, naics: 0.20, setAside: 0.10, location: 0.08, budget: 0.12, contract: 0.04, urgency: 0.08 };
-      const total = Object.keys(weights).reduce((s, k) => s + (parts[k] || 0) * weights[k], 0);
+      let total = Object.keys(weights).reduce((s, k) => s + (parts[k] || 0) * weights[k], 0);
+      // Relevance guard: a federal opportunity (carries a NAICS code) that matches
+      // neither our NAICS list nor any meaningful capability keyword is almost
+      // certainly off-topic — suppress its score heavily rather than omit entirely.
+      if (opp.naics?.length > 0 && naicsScore === 0 && matchedKeywords.length === 0) {
+        total *= 0.3;
+      }
       return { score: +(total * 100).toFixed(1), parts, matchedNaics, matchedKeywords };
     }
 

@@ -299,34 +299,93 @@ function deduplicateOpportunities(opportunities) {
   });
 }
 
+// ── Server-side keyword filter (mirrors client-side filterKeywords) ──────────
+// Applied before building the SAM.gov q= param so filler words never pollute
+// the search query and cause irrelevant solicitations to surface.
+const SEARCH_STOPWORDS = new Set([
+  'a','an','and','are','as','at','be','by','for','from','in','is','it',
+  'of','on','or','the','to','with','we','our','your','their','this','that',
+  'these','those','can','will','all','any','but','not','was','were','been',
+  'have','has','had','do','does','did','so','if','up','no','its','also',
+  'they','them','then','than','more','into','over','about','after','before',
+  'between','through','during','other','such','which','would','could',
+  'should','shall','may','use','used','using','provide','providing',
+  'including','includes','various','specific','general','related',
+  'required','within','across',
+  'service','services','business','company','commercial','government',
+  'solution','solutions','support',
+]);
+const SEARCH_SHORT_ALLOWLIST = new Set(['ai','it','bi','db','qa','ui','ux','ml','ip','os','gis','api','erp','crm','cms']);
+
+function filterSearchKeywords(tokens) {
+  return (tokens || []).filter(t => {
+    if (SEARCH_STOPWORDS.has(t)) return false;
+    if (t.length < 3 && !SEARCH_SHORT_ALLOWLIST.has(t)) return false;
+    return true;
+  });
+}
+
 // ── Fetch from SAM.gov ───────────────────────────────────────────────────────
+// SAM.gov v2 accepts exactly one NAICS code per request.
+// We fan out one request per profile NAICS code (max 3), then merge and
+// deduplicate by noticeId so every relevant code is represented.
 async function fetchSamOpportunities({ naics, keywords, source }, apiKey) {
   const today  = new Date();
   const from90 = new Date(); from90.setDate(today.getDate() - 90);
 
-  const params = new URLSearchParams({
-    limit:      '25',
-    postedFrom:  samDate(from90),
-    postedTo:    samDate(today),
-    api_key:     apiKey,
-  });
+  // Strip stopwords before building q= — only meaningful terms reach SAM.gov
+  const cleanKw = filterSearchKeywords(keywords).slice(0, 6).join(' ').trim();
 
-  if (naics?.length > 0)     params.set('naics', String(naics[0]));
+  const baseParams = {
+    postedFrom: samDate(from90),
+    postedTo:   samDate(today),
+    api_key:    apiKey,
+  };
+  if (cleanKw)             baseParams.q    = cleanKw;
+  if (source === 'grants') baseParams.type = 'Award Notice';
 
-  const kw = (keywords || []).filter(Boolean).slice(0, 5).join(' ').trim();
-  if (kw) params.set('q', kw);
+  const naicsCodes = (naics || []).slice(0, 3);
 
-  // Grants: legacy filter preserved — Award Notice type on SAM.gov
-  if (source === 'grants') params.set('type', 'Award Notice');
-
-  const url    = `https://api.sam.gov/opportunities/v2/search?${params.toString()}`;
-  const apiRes = await fetch(url, { headers: { Accept: 'application/json' } });
-  const data   = await apiRes.json();
-
-  if (!apiRes.ok) {
-    throw new Error(data?.errorMessage || data?.error || `SAM.gov returned ${apiRes.status}`);
+  if (naicsCodes.length === 0) {
+    // No NAICS provided — fall back to keyword-only query
+    const params = new URLSearchParams({ limit: '25', ...baseParams });
+    const apiRes = await fetch(
+      `https://api.sam.gov/opportunities/v2/search?${params.toString()}`,
+      { headers: { Accept: 'application/json' } }
+    );
+    const data = await apiRes.json();
+    if (!apiRes.ok) throw new Error(data?.errorMessage || data?.error || `SAM.gov returned ${apiRes.status}`);
+    return (data?.opportunitiesData || []).map(normalizeSamRecord);
   }
-  return (data?.opportunitiesData || []).map(normalizeSamRecord);
+
+  // One request per NAICS; 15 results each keeps the merged total manageable.
+  const perLimit = naicsCodes.length > 1 ? '15' : '25';
+  const settled  = await Promise.allSettled(
+    naicsCodes.map(async code => {
+      const params = new URLSearchParams({ limit: perLimit, naics: String(code), ...baseParams });
+      const apiRes = await fetch(
+        `https://api.sam.gov/opportunities/v2/search?${params.toString()}`,
+        { headers: { Accept: 'application/json' } }
+      );
+      const data = await apiRes.json();
+      if (!apiRes.ok) throw new Error(`SAM.gov NAICS ${code}: ${apiRes.status}`);
+      return (data?.opportunitiesData || []).map(normalizeSamRecord);
+    })
+  );
+
+  // Merge results and deduplicate by noticeId
+  const seen   = new Set();
+  const merged = [];
+  for (const r of settled) {
+    if (r.status !== 'fulfilled') {
+      console.warn('SAM.gov NAICS request failed:', r.reason?.message);
+      continue;
+    }
+    for (const opp of r.value) {
+      if (!seen.has(opp.id)) { seen.add(opp.id); merged.push(opp); }
+    }
+  }
+  return merged;
 }
 
 // ── Fetch from Tango SLED ────────────────────────────────────────────────────
