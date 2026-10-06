@@ -1191,8 +1191,16 @@
           return;
         }
         if (!['active', 'past_due'].includes(userSub.status)) {
-          $('#status').textContent = 'An active JudyBid subscription is required to search live government opportunities.';
+          $('#status').textContent = 'Subscription required for live search.';
           $('#subscribeBtn')?.classList.remove('hidden');
+          // Show a prominent, actionable message in the results panel
+          $('#results').innerHTML = `
+            <div class="p-8 flex flex-col items-center gap-4 text-center">
+              <p class="text-sm font-medium text-slate-700 dark:text-slate-200">An active JudyBid subscription is required to search live government opportunities.</p>
+              <button id="searchSubCta" class="px-5 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 text-sm font-medium">Subscribe for $99/month</button>
+            </div>`;
+          // Wire the CTA to the existing Stripe checkout flow in the header
+          $('#searchSubCta')?.addEventListener('click', () => $('#subscribeBtn')?.click());
           return;
         }
       }
