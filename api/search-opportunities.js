@@ -327,7 +327,7 @@ function filterSearchKeywords(tokens) {
 
 // ── Fetch from SAM.gov ───────────────────────────────────────────────────────
 // SAM.gov v2 accepts exactly one NAICS code per request.
-// We fan out one request per profile NAICS code (max 3), then merge and
+// We fan out one request per profile NAICS code (max 5), then merge and
 // deduplicate by noticeId so every relevant code is represented.
 async function fetchSamOpportunities({ naics, keywords, source }, apiKey) {
   const today  = new Date();
@@ -344,7 +344,7 @@ async function fetchSamOpportunities({ naics, keywords, source }, apiKey) {
   if (cleanKw)             baseParams.q    = cleanKw;
   if (source === 'grants') baseParams.type = 'Award Notice';
 
-  const naicsCodes = (naics || []).slice(0, 3);
+  const naicsCodes = (naics || []).slice(0, 5);
 
   if (naicsCodes.length === 0) {
     // No NAICS provided — fall back to keyword-only query

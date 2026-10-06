@@ -885,7 +885,7 @@
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          naics:    signals.naics.slice(0, 3),
+          naics:    signals.naics.slice(0, 5),
           keywords: signals.keywords.slice(0, 10),
           source:   overrides.category || 'all',  // 'all'|'federal'|'state-local'|'education'|'grants'
           states:   stateAbbrs,                   // for Tango state filter
