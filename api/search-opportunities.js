@@ -2,6 +2,60 @@
 // Unified opportunity search endpoint.
 // source = 'all' | 'federal' | 'state-local' | 'education' | 'grants'
 //
+// ACCESS CONTROL: requires a verified Firebase ID token (active subscriber)
+// OR a valid advisor access token. Unauthenticated requests → 401.
+// Authenticated but non-entitled requests → 403.
+
+import { verifyFirebaseToken, getAdminDb } from './_admin.js';
+
+// Advisor bypass — must match the token and expiry in index.html boot section
+const ADVISOR_TOKEN  = 'judybid-v1';
+const ADVISOR_EXPIRY = Date.UTC(2026, 11, 31, 4, 59); // 2026-12-31 23:59 ET
+
+/**
+ * Returns { allowed: true } or { allowed: false, status, error }.
+ * Order: advisor token check → Firebase ID token check → Firestore subscription.
+ */
+async function checkEntitlement(body) {
+  const { idToken, advisorToken } = body || {};
+
+  // ── Advisor bypass ───────────────────────────────────────────────
+  if (advisorToken) {
+    if (advisorToken === ADVISOR_TOKEN && Date.now() < ADVISOR_EXPIRY) {
+      return { allowed: true };
+    }
+    return { allowed: false, status: 403, error: 'Advisor access token is invalid or has expired' };
+  }
+
+  // ── Firebase auth check ──────────────────────────────────────────
+  if (!idToken) {
+    return { allowed: false, status: 401, error: 'Sign in to search live government opportunities' };
+  }
+
+  let uid;
+  try {
+    uid = await verifyFirebaseToken(idToken);
+  } catch {
+    return { allowed: false, status: 401, error: 'Invalid authentication token — please sign in again' };
+  }
+
+  // ── Firestore subscription check ─────────────────────────────────
+  try {
+    const db     = getAdminDb();
+    const doc    = await db.collection('users').doc(uid).get();
+    const status = doc.data()?.subscription?.status || 'free';
+    if (['active', 'past_due'].includes(status)) return { allowed: true };
+    return {
+      allowed: false,
+      status:  403,
+      error:   'An active JudyBid subscription is required to search live government opportunities',
+    };
+  } catch (e) {
+    console.error('Subscription check error:', e.message);
+    return { allowed: false, status: 500, error: 'Could not verify subscription status — try again shortly' };
+  }
+}
+//
 // 'all'         → SAM.gov (federal) + Tango SLED (all jurisdictions)
 // 'federal'     → SAM.gov only
 // 'state-local' → Tango SLED (state + local jurisdictions)
@@ -299,9 +353,16 @@ async function fetchTangoOpportunities({ states, keywords }, jurisdictions, apiK
   return (data?.results || []).map(normalizeTangoRecord);
 }
 
-// ── Main handler ─────────────────────────────────────────────────────────────
+// ── Main handler ──────────────────────────────────────────────────
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // ── Server-side access control ───────────────────────────────────────
+  const entitlement = await checkEntitlement(req.body);
+  if (!entitlement.allowed) {
+    return res.status(entitlement.status).json({ error: entitlement.error });
+  }
+  // ── End access control ─────────────────────────────────────────────
 
   const { naics = [], keywords = [], source = 'all', states = [] } = req.body || {};
 

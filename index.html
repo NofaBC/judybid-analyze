@@ -843,6 +843,15 @@
       // Extract 2-letter state abbreviations from user's served locations (for Tango state filter)
       const stateAbbrs = (signals.servedLocations || []).filter(t => t.length === 2).slice(0, 5);
 
+      // Auth tokens for server-side entitlement check (defense in depth)
+      let idToken      = null;
+      let advisorToken = null;
+      if (window._advisorAccess) {
+        advisorToken = 'judybid-v1';            // matched against server-side constant
+      } else if (currentUser) {
+        idToken = await currentUser.getIdToken(); // short-lived Firebase ID token
+      }
+
       const res = await fetch('/api/search-opportunities', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -851,10 +860,14 @@
           keywords: signals.keywords.slice(0, 10),
           source:   overrides.category || 'all',  // 'all'|'federal'|'state-local'|'education'|'grants'
           states:   stateAbbrs,                   // for Tango state filter
+          idToken,        // Firebase ID token (verified server-side)
+          advisorToken,   // advisor bypass token (verified server-side)
         }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
+        if (res.status === 401) throw new Error(err.error || 'Sign in to search live opportunities');
+        if (res.status === 403) throw new Error(err.error || 'Subscription required for live search');
         throw new Error(err.error || `Search API returned ${res.status}`);
       }
       const data = await res.json();
@@ -1168,17 +1181,22 @@
      * Runs the full pipeline: profile → signals → rank → render.
      */
     async function findByProfile() {
-      // Soft usage gate — only applies to signed-in free accounts (bypassed for advisor/past_due)
-      if (currentUser && !['active','past_due'].includes(userSub.status) && !window._advisorAccess) {
-        const runCount = userSub.monthlyMatchRunCount || 0;
-        const runLimit = userSub.matchRunLimit || 10;
-        if (runCount >= runLimit) {
-          $('#status').textContent =
-            `Monthly limit reached (${runLimit} match runs used). Subscribe to JudyBid Analyze™ to continue.`;
+      // ── Client-side live-search entitlement gate ────────────────────────────────
+      // Advisors bypass. Everyone else must be signed in with an active subscription.
+      // The server enforces the same rules independently (defense in depth).
+      if (!window._advisorAccess) {
+        if (!currentUser) {
+          $('#status').textContent = 'Sign in to search live government opportunities.';
+          showAuthModal();
+          return;
+        }
+        if (!['active', 'past_due'].includes(userSub.status)) {
+          $('#status').textContent = 'An active JudyBid subscription is required to search live government opportunities.';
           $('#subscribeBtn')?.classList.remove('hidden');
           return;
         }
       }
+      // ── End entitlement gate ────────────────────────────────────────────────
 
       const profile = getBusinessProfile();
       const capInput = getCapabilityStatementInput();
@@ -1899,11 +1917,12 @@
         window._stripeCheckoutSuccess = true;
       }
     })();
-    // Advisor / testing access (temporary — expires 2026-08-25 23:59 ET)
+    // Advisor / testing access (temporary — expires 2026-12-31 23:59 ET)
     // To disable early: change ADVISOR_TOKEN to any other string, redeploy.
+    // Token and expiry must match api/search-opportunities.js ADVISOR_TOKEN/ADVISOR_EXPIRY.
     (function () {
       const ADVISOR_TOKEN  = 'judybid-v1';
-      const ADVISOR_EXPIRY = Date.UTC(2026, 7, 26, 3, 59); // 2026-08-25 23:59 ET = 2026-08-26 03:59 UTC
+      const ADVISOR_EXPIRY = Date.UTC(2026, 11, 31, 4, 59); // 2026-12-31 23:59 ET = 2027-01-01 04:59 UTC
       const param = new URLSearchParams(window.location.search).get('advisor_test');
       window.history.replaceState({}, '', window.location.pathname); // always clean URL
       if (param === ADVISOR_TOKEN && Date.now() < ADVISOR_EXPIRY) {
