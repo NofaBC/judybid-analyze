@@ -32,7 +32,6 @@
         <h1 class="text-xl sm:text-2xl font-semibold tracking-tight">JudyBid Analyze™</h1>
       </div>
       <div class="flex items-center gap-2">
-        <button id="exampleToggle" class="px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 text-sm" aria-pressed="true" title="Toggle example opportunities">Example Opportunities: On</button>
         <!-- Auth area -->
         <button id="signInBtn" class="px-3 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-sm">Sign In</button>
         <div id="userArea" class="hidden items-center gap-2">
@@ -264,7 +263,6 @@
 
         <hr class="border-slate-200/80 dark:border-slate-700" />
 
-        <button id="exampleBtn" class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm">Load Example Opportunities</button>
         <button id="manualAddBtn" class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-sm">Add Opportunity Manually ↓</button>
         <div>
           <span class="text-sm font-medium">Paste Opportunity Link</span>
@@ -617,9 +615,9 @@
     function daysUntil(d) { const ms = new Date(d) - now(); return Math.ceil(ms / (1000*60*60*24)); }
 
     const State = {
-      useExamples: true,
+      useExamples: false, // SAMPLE_RFPS kept for internal/advisor use — not loaded in production
       feeds: [],
-      rfps: [...SAMPLE_RFPS],
+      rfps: [],
       matches: [],
       profile: null,
       filters: { dueSoon: false, setAside: false, budgetFit: false, naicsFit: false, contractFit: false },
@@ -1124,7 +1122,7 @@
       $('#resultCount').textContent = `${list.length} found`;
 
       if (!list.length) {
-        resultsEl.innerHTML = `<div class="p-6 text-sm text-slate-500">No results yet. Click <b>Find Opportunities Using My Business Profile</b> or <b>Load Example Opportunities</b> to get started.</div>`;
+        resultsEl.innerHTML = `<div class="p-6 text-sm text-slate-500">No opportunities loaded yet. Complete your business profile and run a live search to find matching government opportunities.</div>`;
         return;
       }
 
@@ -1386,7 +1384,7 @@
       $('#resultCount').textContent = `${list.length} found`;
 
       if (!list.length) {
-        resultsEl.innerHTML = `<div class="p-6 text-sm text-slate-500">No results yet. Click <b>Find Opportunities Using My Business Profile</b> or <b>Load Example Opportunities</b> to get started.</div>`;
+        resultsEl.innerHTML = `<div class="p-6 text-sm text-slate-500">No opportunities loaded yet. Complete your business profile and run a live search to find matching government opportunities.</div>`;
         return;
       }
 
@@ -1502,7 +1500,6 @@
       const naics = parseInt(naicsRaw, 10);
       const loc = ($('#searchLocation')?.value || '').trim().toLowerCase();
       const type = $('#searchType')?.value || '';
-      if (!State.rfps.length) { State.useExamples = true; State.rfps = [...SAMPLE_RFPS]; }
       const profile = readProfile();
       State.profile = profile;
       const scored = State.rfps
@@ -1546,9 +1543,9 @@
       try {
         const raw = localStorage.getItem('judybid-ai'); if (!raw) return;
         const blob = JSON.parse(raw);
-        State.useExamples = !!blob.useExamples;
+        State.useExamples = false; // always start clean in production; ignore saved useExamples flag
         State.feeds = blob.feeds || [];
-        State.rfps = blob.rfps?.length ? blob.rfps.map(r=>({ ...r, dueDate: r.dueDate })) : [...SAMPLE_RFPS];
+        State.rfps = blob.rfps?.length ? blob.rfps.map(r=>({ ...r, dueDate: r.dueDate })) : [];
         if (blob.profile) fillProfile(blob.profile);
         renderFeeds();
       } catch {}
@@ -1765,11 +1762,13 @@
         localStorage.setItem('judybid-theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
       });
 
-      // Example Opportunities toggle
+      // Example Opportunities toggle (button removed from production UI; guarded for advisor/internal use)
       const exampleToggleBtn = $('#exampleToggle');
-      const syncExampleLabel = () => exampleToggleBtn.textContent = `Example Opportunities: ${State.useExamples ? 'On' : 'Off'}`;
-      syncExampleLabel();
-      exampleToggleBtn.addEventListener('click', () => { State.useExamples = !State.useExamples; syncExampleLabel(); persistLocal(); });
+      if (exampleToggleBtn) {
+        const syncExampleLabel = () => exampleToggleBtn.textContent = `Example Opportunities: ${State.useExamples ? 'On' : 'Off'}`;
+        syncExampleLabel();
+        exampleToggleBtn.addEventListener('click', () => { State.useExamples = !State.useExamples; syncExampleLabel(); persistLocal(); });
+      }
 
       // Feeds
       $('#addFeedBtn').addEventListener('click', (e) => {
@@ -1885,7 +1884,7 @@
 
       // Opportunity Search panel
       $('#searchBtn').addEventListener('click', findByProfile);
-      $('#exampleBtn').addEventListener('click', async () => { State.useExamples = true; await fetchRFPs(); await runMatch(); });
+      $('#exampleBtn')?.addEventListener('click', async () => { State.useExamples = true; await fetchRFPs(); await runMatch(); });
       $('#manualAddBtn').addEventListener('click', () => { const t = $('#addTitle'); t.scrollIntoView({ behavior: 'smooth' }); setTimeout(() => t.focus(), 300); });
       $('#pasteLinkBtn').addEventListener('click', handlePasteLink);
 
