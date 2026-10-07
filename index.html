@@ -325,7 +325,7 @@
       <button id="addRfpBtn" class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800">Add</button>
     </section>
 
-    <footer class="py-8 text-center text-sm text-slate-500">© <span id="year"></span> NOFA AI Factory — JudyBid Analyze™. JudyBid advises; the user decides.</footer>
+    <footer class="py-8 text-center text-sm text-slate-500">© <span id="year"></span> NOFA AI Factory — JudyBid Analyze™. JudyBid advises; the user decides. &nbsp;·&nbsp; Support: <a href="mailto:supportdesk@nofabusinessconsulting.com" class="underline hover:text-slate-700 dark:hover:text-slate-300">supportdesk@nofabusinessconsulting.com</a></footer>
   </main>
 
   <!-- Auth Modal -->
@@ -1233,6 +1233,7 @@
             <div class="p-8 flex flex-col items-center gap-4 text-center">
               <p class="text-sm font-medium text-slate-700 dark:text-slate-200">An active JudyBid subscription is required to search live government opportunities.</p>
               <button id="searchSubCta" class="px-5 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 text-sm font-medium">Subscribe for $99/month</button>
+              <p class="text-xs text-slate-400">Need help? Contact <a href="mailto:supportdesk@nofabusinessconsulting.com" class="underline hover:text-slate-600 dark:hover:text-slate-300">supportdesk@nofabusinessconsulting.com</a></p>
             </div>`;
           // Wire the CTA to the existing Stripe checkout flow in the header
           $('#searchSubCta')?.addEventListener('click', () => $('#subscribeBtn')?.click());
