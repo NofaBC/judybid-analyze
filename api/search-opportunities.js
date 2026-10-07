@@ -85,12 +85,15 @@ async function checkAndReserveUsage(uid) {
       const currentPeriodStart = sub.currentBillingPeriodStart || null;
       const usagePeriodEnd     = sub.usagePeriodEnd            || null;
 
-      // Billing-period rollover detection:
-      // (a) Stripe webhook updated currentBillingPeriodEnd for a new cycle, or
-      // (b) the stored period end has passed (webhook may not have fired yet).
+      // Billing-period rollover detection — webhook-driven only.
+      // We intentionally do NOT use a time-based fallback (now > currentBillingPeriodEnd).
+      // Reason: if the webhook hasn't fired yet, currentBillingPeriodEnd is still the
+      // expired date. Writing usagePeriodEnd = that expired date would re-trigger on
+      // every subsequent search, resetting the counter to 0 indefinitely. Relying
+      // solely on the webhook (condition a) avoids the infinite-reset bug; Stripe
+      // delivers customer.subscription.updated within seconds of renewal.
       const periodChanged =
-        (usagePeriodEnd && currentPeriodEnd && usagePeriodEnd !== currentPeriodEnd) ||
-        (currentPeriodEnd && new Date() > new Date(currentPeriodEnd));
+        !!(usagePeriodEnd && currentPeriodEnd && usagePeriodEnd !== currentPeriodEnd);
 
       const currentUsed = periodChanged ? 0 : (sub.liveSearchesUsed || 0);
       const limit       = sub.liveSearchLimit ?? LIVE_SEARCH_LIMIT;
@@ -127,6 +130,36 @@ async function checkAndReserveUsage(uid) {
   }
 
   return result;
+}
+
+/**
+ * Compensating transaction: releases one previously reserved usage slot.
+ * Called when every enabled external source (SAM.gov and/or Tango) fails
+ * at the API level so no live data was returned to the user.
+ *
+ * Important distinctions:
+ *   - A successful API response with zero matching opportunities does NOT release.
+ *   - Only an actual rejection (network error, non-2xx status, etc.) qualifies.
+ *   - Never decrements below 0 (guarded by the transaction read).
+ *   - Never called for advisors (caller is responsible).
+ *   - Best-effort: errors are logged but not propagated.
+ */
+async function releaseUsageSlot(uid) {
+  const db      = getAdminDb();
+  const userRef = db.collection('users').doc(uid);
+  try {
+    await db.runTransaction(async tx => {
+      const doc         = await tx.get(userRef);
+      const currentUsed = doc.data()?.subscription?.liveSearchesUsed || 0;
+      if (currentUsed <= 0) return; // guard: never go negative
+      tx.update(userRef, {
+        'subscription.liveSearchesUsed': currentUsed - 1,
+        'subscription.usageUpdatedAt':   FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (e) {
+    console.error('Usage release error (slot not returned):', e.message);
+  }
 }
 //
 // 'all'         → SAM.gov (federal) + Tango SLED (all jurisdictions)
@@ -545,6 +578,21 @@ export default async function handler(req, res) {
 
   if (samError)   console.error('SAM.gov error:', samError);
   if (tangoError) console.error('Tango SLED error:', tangoError);
+
+  // Release the reserved usage slot when every called source fails at the API level.
+  // "Failed" means the Promise rejected (network error / non-2xx status), not merely
+  // an empty result set — a 200 with zero opportunities still counts as 1 search.
+  // Sources that were not configured (no API key) resolve to [] and are not "failing".
+  if (!entitlement.isAdvisor && usageInfo.used !== null) {
+    const totalExternalFailure =
+      (callSam || callTango) &&
+      (!callSam   || samResult.status   === 'rejected') &&
+      (!callTango || tangoResult.status === 'rejected');
+    if (totalExternalFailure) {
+      await releaseUsageSlot(entitlement.uid);
+      usageInfo = { used: Math.max(0, usageInfo.used - 1), limit: usageInfo.limit };
+    }
+  }
 
   // Combine (SAM.gov first) and deduplicate
   const combined = deduplicateOpportunities([...samOpps, ...tangoOpps]);
