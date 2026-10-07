@@ -7,22 +7,27 @@
 // Authenticated but non-entitled requests → 403.
 
 import { verifyFirebaseToken, getAdminDb } from './_admin.js';
+import { FieldValue } from 'firebase-admin/firestore';
+
+// Standard plan: monthly live-search allowance per Stripe billing period
+const LIVE_SEARCH_LIMIT = 100;
 
 // Advisor bypass — must match the token and expiry in index.html boot section
 const ADVISOR_TOKEN  = 'judybid-v1';
 const ADVISOR_EXPIRY = Date.UTC(2026, 11, 31, 4, 59); // 2026-12-31 23:59 ET
 
 /**
- * Returns { allowed: true } or { allowed: false, status, error }.
- * Order: advisor token check → Firebase ID token check → Firestore subscription.
+ * Returns { allowed, uid?, isAdvisor?, status?, error? }.
+ * uid is propagated for usage accounting; isAdvisor bypasses metering.
+ * Order: advisor token → Firebase ID token → Firestore subscription.
  */
-async function checkEntitlement(body) {
+async function checkEntitlementWithUid(body) {
   const { idToken, advisorToken } = body || {};
 
   // ── Advisor bypass ───────────────────────────────────────────────
   if (advisorToken) {
     if (advisorToken === ADVISOR_TOKEN && Date.now() < ADVISOR_EXPIRY) {
-      return { allowed: true };
+      return { allowed: true, isAdvisor: true };
     }
     return { allowed: false, status: 403, error: 'Advisor access token is invalid or has expired' };
   }
@@ -44,7 +49,7 @@ async function checkEntitlement(body) {
     const db     = getAdminDb();
     const doc    = await db.collection('users').doc(uid).get();
     const status = doc.data()?.subscription?.status || 'free';
-    if (['active', 'past_due'].includes(status)) return { allowed: true };
+    if (['active', 'past_due'].includes(status)) return { allowed: true, uid, isAdvisor: false };
     return {
       allowed: false,
       status:  403,
@@ -54,6 +59,74 @@ async function checkEntitlement(body) {
     console.error('Subscription check error:', e.message);
     return { allowed: false, status: 500, error: 'Could not verify subscription status — try again shortly' };
   }
+}
+
+/**
+ * Atomically reserves one live-search usage slot using a Firestore transaction.
+ * Detects billing-period rollover by comparing stored usagePeriodEnd with the
+ * current Stripe billing period (updated by stripe-webhook.js on renewal).
+ *
+ * Returns { allowed: true, used, limit }  when a slot is reserved, or
+ *         { allowed: false, status: 429, error, used, limit } when the cap is hit.
+ * On unexpected Firestore errors the search is allowed through (infra issues
+ * should not block paying users).
+ */
+async function checkAndReserveUsage(uid) {
+  const db      = getAdminDb();
+  const userRef = db.collection('users').doc(uid);
+  let result;
+
+  try {
+    await db.runTransaction(async tx => {
+      const doc = await tx.get(userRef);
+      const sub = doc.data()?.subscription || {};
+
+      const currentPeriodEnd   = sub.currentBillingPeriodEnd   || null;
+      const currentPeriodStart = sub.currentBillingPeriodStart || null;
+      const usagePeriodEnd     = sub.usagePeriodEnd            || null;
+
+      // Billing-period rollover detection:
+      // (a) Stripe webhook updated currentBillingPeriodEnd for a new cycle, or
+      // (b) the stored period end has passed (webhook may not have fired yet).
+      const periodChanged =
+        (usagePeriodEnd && currentPeriodEnd && usagePeriodEnd !== currentPeriodEnd) ||
+        (currentPeriodEnd && new Date() > new Date(currentPeriodEnd));
+
+      const currentUsed = periodChanged ? 0 : (sub.liveSearchesUsed || 0);
+      const limit       = sub.liveSearchLimit ?? LIVE_SEARCH_LIMIT;
+
+      if (currentUsed >= limit) {
+        const resetDate = currentPeriodEnd
+          ? new Date(currentPeriodEnd).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
+          : 'your next billing date';
+        result = {
+          allowed: false,
+          status:  429,
+          error:   `You've reached your monthly live-search limit. Your allowance resets on ${resetDate}.`,
+          used:    currentUsed,
+          limit,
+        };
+        throw new Error('USAGE_LIMIT_REACHED'); // abort transaction — no write occurs
+      }
+
+      const usedAfter = currentUsed + 1;
+      result = { allowed: true, used: usedAfter, limit };
+
+      tx.update(userRef, {
+        'subscription.liveSearchesUsed': usedAfter,
+        'subscription.liveSearchLimit':  limit,
+        'subscription.usagePeriodStart': periodChanged ? currentPeriodStart : (sub.usagePeriodStart || currentPeriodStart),
+        'subscription.usagePeriodEnd':   periodChanged ? currentPeriodEnd   : (sub.usagePeriodEnd   || currentPeriodEnd),
+        'subscription.usageUpdatedAt':   FieldValue.serverTimestamp(),
+      });
+    });
+  } catch (e) {
+    if (e.message === 'USAGE_LIMIT_REACHED') return result;
+    console.error('Usage reservation error:', e.message);
+    return { allowed: true, used: null, limit: LIVE_SEARCH_LIMIT }; // fail open
+  }
+
+  return result;
 }
 //
 // 'all'         → SAM.gov (federal) + Tango SLED (all jurisdictions)
@@ -416,12 +489,27 @@ async function fetchTangoOpportunities({ states, keywords }, jurisdictions, apiK
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // ── Server-side access control ───────────────────────────────────────
-  const entitlement = await checkEntitlement(req.body);
+  // ── Server-side access control & usage enforcement ─────────────────
+  const entitlement = await checkEntitlementWithUid(req.body);
   if (!entitlement.allowed) {
     return res.status(entitlement.status).json({ error: entitlement.error });
   }
-  // ── End access control ─────────────────────────────────────────────
+
+  // Advisors bypass usage metering; paid subscribers are metered per billing period.
+  // One logical search = 1 unit regardless of how many NAICS or source fan-outs fire.
+  let usageInfo = { used: null, limit: LIVE_SEARCH_LIMIT };
+  if (!entitlement.isAdvisor) {
+    const usageCheck = await checkAndReserveUsage(entitlement.uid);
+    if (!usageCheck.allowed) {
+      return res.status(usageCheck.status).json({
+        error:            usageCheck.error,
+        liveSearchesUsed: usageCheck.used,
+        liveSearchLimit:  usageCheck.limit,
+      });
+    }
+    usageInfo = { used: usageCheck.used, limit: usageCheck.limit };
+  }
+  // ── End access control & usage ─────────────────────────────────────
 
   const { naics = [], keywords = [], source = 'all', states = [] } = req.body || {};
 
@@ -468,5 +556,7 @@ export default async function handler(req, res) {
       sam:   { count: samOpps.length,   error: samError   || null },
       tango: { count: tangoOpps.length, error: tangoError || null },
     },
+    liveSearchesUsed: usageInfo.used,
+    liveSearchLimit:  usageInfo.limit,
   });
 }

@@ -227,6 +227,8 @@
         <button id="searchBtn" class="w-full px-4 py-2.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 text-sm font-medium">Find Opportunities Using My Business Profile</button>
         <p class="text-xs text-slate-500 -mt-1">JudyBid searches connected live government sources using your business profile and search criteria, then scores the returned opportunities for fit.</p>
         <p class="text-xs text-slate-400 mt-0.5">Federal results come from SAM.gov. State, local, and education results come from connected SLED sources.</p>
+        <!-- Live-search usage indicator — shown to active subscribers after first search -->
+        <div id="searchUsage" class="hidden text-xs text-slate-400 text-center py-0.5"></div>
 
         <!-- Advanced Search Filters (collapsible) -->
         <details class="rounded-lg border border-slate-200/80 dark:border-slate-700">
@@ -382,6 +384,7 @@
 
     let fbAuth = null, fbDb = null, currentUser = null;
     let userSub = { status: 'free', monthlyMatchRunCount: 0, matchRunLimit: 10,
+                    liveSearchesUsed: null, liveSearchLimit: 100,
                     currentBillingPeriodStart: null, currentBillingPeriodEnd: null };
 
     // Firestore path helpers
@@ -426,6 +429,30 @@
       }
     }
 
+    /**
+     * Renders the live-search usage indicator near the search button.
+     * Shown only to active/paid subscribers with known usage data.
+     * Hidden for advisors, anonymous users, free users, and before first search.
+     */
+    function renderUsageIndicator() {
+      const el = $('#searchUsage');
+      if (!el) return;
+      if (window._advisorAccess || !currentUser || !['active','past_due'].includes(userSub.status)) {
+        el.classList.add('hidden'); el.innerHTML = ''; return;
+      }
+      const used  = userSub.liveSearchesUsed;
+      const limit = userSub.liveSearchLimit ?? 100;
+      if (used == null) { el.classList.add('hidden'); return; }
+      el.classList.remove('hidden');
+      if (used >= limit) {
+        el.innerHTML = `<span class="text-amber-600 dark:text-amber-400 font-medium">Monthly live-search limit reached.</span>`
+          + ` Resets on your next billing date.`
+          + ` <a href="mailto:supportdesk@nofabusinessconsulting.com" class="underline hover:text-slate-600 dark:hover:text-slate-300">Contact&nbsp;Support</a>`;
+      } else {
+        el.innerHTML = `Live searches used: <span class="font-medium text-slate-600 dark:text-slate-300">${used}\u00a0of\u00a0${limit}</span>`;
+      }
+    }
+
     async function ensureUserDoc(uid) {
       if (!fbDb) return;
       try {
@@ -446,6 +473,7 @@
           userSub = snap.data().subscription || userSub;
         }
         syncAuthUI(currentUser);
+        renderUsageIndicator();
       } catch (e) { console.warn('ensureUserDoc:', e); }
     }
 
@@ -895,10 +923,25 @@
         const err = await res.json().catch(() => ({}));
         if (res.status === 401) throw new Error(err.error || 'Sign in to search live opportunities');
         if (res.status === 403) throw new Error(err.error || 'Subscription required for live search');
+        if (res.status === 429) {
+          // Sync local counter so the indicator reflects the hard limit
+          if (err.liveSearchesUsed != null) {
+            userSub.liveSearchesUsed = err.liveSearchesUsed;
+            userSub.liveSearchLimit  = err.liveSearchLimit ?? 100;
+          }
+          const limitErr = new Error(err.error || 'Monthly live-search limit reached');
+          limitErr.isLimitReached = true;
+          throw limitErr;
+        }
         throw new Error(err.error || `Search API returned ${res.status}`);
       }
       const data = await res.json();
-      return { opportunities: data.opportunities || [], sources: data.sources || {} };
+      return {
+        opportunities:    data.opportunities    || [],
+        sources:          data.sources          || {},
+        liveSearchesUsed: data.liveSearchesUsed ?? null,
+        liveSearchLimit:  data.liveSearchLimit  ?? 100,
+      };
     }
 
     /**
@@ -1253,6 +1296,12 @@
         category: $('#categoryFilter')?.value  || 'all',
       };
 
+      // Disable search button while the request is in flight (concurrency guard)
+      const searchBtn = $('#searchBtn');
+      if (searchBtn) { searchBtn.disabled = true; searchBtn.textContent = 'Searching\u2026'; }
+
+      try {
+
       // Loading message — source-aware
       const _srcLabels = {
         'all':         'federal and state/local opportunities',
@@ -1262,8 +1311,8 @@
         'grants':      'grant opportunities',
       };
       const _srcLabel = _srcLabels[overrides.category] || 'opportunities';
-      $('#status').textContent = `Searching ${_srcLabel}…`;
-      $('#results').innerHTML  = `<div class="p-6 text-sm text-slate-500">Searching for opportunities matching your profile…</div>`;
+      $('#status').textContent = `Searching ${_srcLabel}\u2026`;
+      $('#results').innerHTML  = `<div class="p-6 text-sm text-slate-500">Searching for opportunities matching your profile\u2026</div>`;
 
       // Fetch live opportunities; fall back to examples on complete failure
       let pool;
@@ -1275,9 +1324,26 @@
         liveSourceInfo    = liveResult.sources || {};
         State.rfps        = pool;
         State.useExamples = false;
+        // Sync live-search counter from authoritative server response
+        if (liveResult.liveSearchesUsed != null) {
+          userSub.liveSearchesUsed = liveResult.liveSearchesUsed;
+          userSub.liveSearchLimit  = liveResult.liveSearchLimit ?? 100;
+          renderUsageIndicator();
+        }
       } catch (e) {
         console.error('Live search failed:', e.message);
         usedLiveSearch = false;
+        if (e.isLimitReached) {
+          // Monthly limit hit — show targeted message; do NOT fall back to examples
+          renderUsageIndicator();
+          $('#results').innerHTML = `
+            <div class="p-8 flex flex-col items-center gap-4 text-center">
+              <p class="text-sm font-medium text-slate-700 dark:text-slate-200">${e.message}</p>
+              <p class="text-xs text-slate-400">Need help? Contact <a href="mailto:supportdesk@nofabusinessconsulting.com" class="underline hover:text-slate-600 dark:hover:text-slate-300">supportdesk@nofabusinessconsulting.com</a></p>
+            </div>`;
+          $('#status').textContent = 'Monthly live-search limit reached.';
+          return; // button re-enabled by outer finally
+        }
         pool = getOpportunityPool(); // fallback — Manual Add and Load Examples still work
         $('#status').textContent = `Live search unavailable (${e.message}). Showing example opportunities.`;
       }
@@ -1319,7 +1385,7 @@
         const runCount = userSub.monthlyMatchRunCount || 0;
         const runLimit = userSub.matchRunLimit || 10;
         const remaining = runLimit - runCount;
-        let usage = ` · ${runCount} of ${runLimit} monthly runs used.`;
+        let usage = ` \u00b7 ${runCount} of ${runLimit} monthly runs used.`;
         if (remaining <= 0) {
           usage += ' Subscribe to continue matching.';
           $('#subscribeBtn')?.classList.remove('hidden');
@@ -1327,6 +1393,11 @@
           usage += ` ${remaining} run${remaining > 1 ? 's' : ''} remaining this month.`;
         }
         if (ranked.length > 0) $('#status').textContent = msg + usage;
+      }
+
+      } finally {
+        // Always re-enable the search button when the operation completes or returns early
+        if (searchBtn) { searchBtn.disabled = false; searchBtn.textContent = 'Find Opportunities Using My Business Profile'; }
       }
     }
 
